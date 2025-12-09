@@ -6,7 +6,7 @@ Schneller Einstieg in 5 Minuten!
 
 ```bash
 # Repository klonen
-git clone https://github.com/IHR-USERNAME/mistral-cli.git
+git clone https://github.com/triplecore-acs/mistral-cli.git
 cd mistral-cli
 
 # Virtuelle Umgebung erstellen

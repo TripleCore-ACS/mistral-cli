@@ -5,7 +5,7 @@ Vielen Dank für Ihr Interesse, zu Mistral CLI beizutragen!
 ## Wie kann ich beitragen?
 
 ### Bug Reports
-- Verwenden Sie die [GitHub Issues](https://github.com/IHR-USERNAME/mistral-cli/issues)
+- Verwenden Sie die [GitHub Issues](https://github.com/triplecore-acs/mistral-cli/issues)
 - Beschreiben Sie das Problem detailliert
 - Fügen Sie Schritte zur Reproduktion hinzu
 - Geben Sie Ihre System- und Python-Version an
@@ -38,7 +38,7 @@ Vielen Dank für Ihr Interesse, zu Mistral CLI beizutragen!
 
 ```bash
 # Repository forken und klonen
-git clone https://github.com/IHR-USERNAME/mistral-cli.git
+git clone https://github.com/triplecore-acs/mistral-cli.git
 cd mistral-cli
 
 # Virtuelle Umgebung erstellen

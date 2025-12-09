@@ -36,7 +36,7 @@ Eine leistungsstarke Kommandozeilenanwendung für Mistral AI mit erweiterten Too
 
 ### Schritt 1: Repository klonen
 ```bash
-git clone https://github.com/IHR-USERNAME/mistral-cli.git
+git clone https://github.com/triplecore-acs/mistral-cli.git
 cd mistral-cli
 ```
 
@@ -230,8 +230,8 @@ MIT License - siehe [LICENSE](LICENSE) Datei für Details
 
 ## Support
 
-- **Issues**: [GitHub Issues](https://github.com/IHR-USERNAME/mistral-cli/issues)
-- **Diskussionen**: [GitHub Discussions](https://github.com/IHR-USERNAME/mistral-cli/discussions)
+- **Issues**: [GitHub Issues](https://github.com/triplecore-acs/mistral-cli/issues)
+- **Diskussionen**: [GitHub Discussions](https://github.com/triplecore-acs/mistral-cli/discussions)
 - **Mistral AI**: [Offizielle Dokumentation](https://docs.mistral.ai)
 
 ## Changelog

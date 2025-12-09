@@ -24,7 +24,7 @@ setup(
     description="Leistungsstarke CLI für Mistral AI mit erweiterten Tool-Funktionen",
     long_description=read_readme(),
     long_description_content_type="text/markdown",
-    url="https://github.com/IHR-USERNAME/mistral-cli",  # Ersetzen Sie IHR-USERNAME
+    url="https://github.com/triplecore-acs/mistral-cli",
     py_modules=["mistral-cli"],
     scripts=["mistral"],
     install_requires=read_requirements(),
@@ -49,8 +49,8 @@ setup(
     python_requires=">=3.8",
     keywords="mistral ai cli chatbot automation tools",
     project_urls={
-        "Bug Reports": "https://github.com/IHR-USERNAME/mistral-cli/issues",
-        "Source": "https://github.com/IHR-USERNAME/mistral-cli",
-        "Documentation": "https://github.com/IHR-USERNAME/mistral-cli#readme",
+        "Bug Reports": "https://github.com/triplecore-acs/mistral-cli/issues",
+        "Source": "https://github.com/triplecore-acs/mistral-cli",
+        "Documentation": "https://github.com/triplecore-acs/mistral-cli#readme",
     },
 )
