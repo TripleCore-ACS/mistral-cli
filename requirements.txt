@@ -1,0 +1,14 @@
+# Mistral CLI - Dependencies
+
+# Core dependency - Mistral AI Python SDK
+mistralai>=1.0.0
+
+# Optional dependencies for enhanced features
+# Uncomment if needed:
+
+# Image processing (for get_image_info tool)
+# Pillow>=10.0.0
+
+# Additional useful packages (optional)
+# requests>=2.31.0  # Alternative HTTP client
+# beautifulsoup4>=4.12.0  # HTML parsing

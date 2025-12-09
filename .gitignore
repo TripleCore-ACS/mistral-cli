@@ -1,0 +1,65 @@
+# Mistral CLI - Git Ignore File
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+mistral_env/
+venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+*.cover
+
+# Logs
+*.log
+
+# Environment variables
+.env
+.env.local
+
+# API Keys (WICHTIG!)
+*api_key*
+*API_KEY*
+credentials.json
+
+# User-specific files
+INITIALISIERUNG.txt
+INSTALLATION_SCHRITTE.txt
+
+# Temporary files
+*.tmp
+*.bak
+tmp/
+temp/
