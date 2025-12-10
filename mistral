@@ -4,5 +4,9 @@
 # Verzeichnis des Scripts
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Virtuelle Umgebung aktivieren und Python-Script ausführen
-"$SCRIPT_DIR/mistral_env/bin/python" "$SCRIPT_DIR/mistral-cli.py" "$@"
+# Prüfe ob virtuelle Umgebung existiert, sonst nutze System-Python
+if [ -f "$SCRIPT_DIR/mistral_env/bin/python" ]; then
+    "$SCRIPT_DIR/mistral_env/bin/python" "$SCRIPT_DIR/mistral-cli.py" "$@"
+else
+    python3 "$SCRIPT_DIR/mistral-cli.py" "$@"
+fi
