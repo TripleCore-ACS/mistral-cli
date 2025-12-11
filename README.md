@@ -236,7 +236,7 @@ MIT License - siehe [LICENSE](LICENSE) Datei für Details
 
 ## Changelog
 
-### v1.0.0 (2024)
+### v1.0.5 (2025)
 - Initial Release
 - Interaktiver Chat mit Function Calling
 - 13 integrierte Tools
