@@ -3,6 +3,9 @@
 # Core dependency - Mistral AI Python SDK
 mistralai>=1.0.0
 
+# TUI (Text User Interface) dependency
+textual>=0.47.0
+
 # Optional dependencies for enhanced features
 # Uncomment if needed:
 

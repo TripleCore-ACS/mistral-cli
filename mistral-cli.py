@@ -713,21 +713,36 @@ def cmd_chat(args):
     """Interaktiver Chat-Modus mit Tool-Unterstützung."""
     client = get_client()
 
-    print("Mistral AI Chat mit Tool-Unterstützung")
-    print("(Zum Beenden 'exit' oder 'quit' eingeben)")
-    print(f"Modell: {args.model}")
-    print("Verfügbare Tools:")
-    print("  - Bash-Befehle, Dateien (lesen/schreiben/umbenennen/kopieren/verschieben)")
-    print("  - Web (Suche, URL-Abruf, Downloads, FTP-Upload)")
-    print("  - Datenverarbeitung (JSON/CSV-Parsing)")
-    print("  - Bildanalyse (Format, Größe, Dimensionen)\n")
+    # ASCII Logo
+    logo = r"""
+┌───────────────────────────────────────────────────┐
+│ ███╗   ███╗██╗███████╗████████╗██████╗  █████╗ ██╗│
+│ ████╗ ████║██║██╔════╝╚══██╔══╝██╔══██╗██╔══██╗██║│
+│ ██╔████╔██║██║███████╗   ██║   ██████╔╝███████║██║│
+│ ██║╚██╔╝██║██║╚════██║   ██║   ██╔══██╗██╔══██║██║│
+│ ██║ ╚═╝ ██║██║███████║   ██║   ██║  ██║██║  ██║███║│
+│ ╚═╝     ╚═╝╚═╝╚══════╝   ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝╚══╝│
+│        CLI TOOL - ⚠️ UNOFFICIAL VERSION ⚠️         │
+└───────────────────────────────────────────────────┘
+"""
+
+    print(logo)
+    print("Bienvenue! 🇫🇷\n")
+    print("Mistral AI Chat with Tool Support")
+    print("(Enter 'exit' or 'quit' to exit)")
+    print(f"Model: {args.model}")
+    print("Available Tools:")
+    print("  - Bash commands, Files (read/write/rename/copy/move)")
+    print("  - Web (search, URL fetch, downloads, FTP upload)")
+    print("  - Data processing (JSON/CSV parsing)")
+    print("  - Image analysis (format, size, dimensions)\n")
 
     messages = []
     while True:
         try:
-            user_input = input("Sie: ").strip()
+            user_input = input("You: ").strip()
             if user_input.lower() in ['exit', 'quit', 'q']:
-                print("Auf Wiedersehen!")
+                print("Au revoir!")
                 break
 
             if not user_input:
@@ -792,10 +807,10 @@ def cmd_chat(args):
                 print()
 
         except KeyboardInterrupt:
-            print("\n\nAuf Wiedersehen!")
+            print("\n\nAu revoir!")
             break
         except Exception as e:
-            print(f"\nFehler: {str(e)}\n", file=sys.stderr)
+            print(f"\nError: {str(e)}\n", file=sys.stderr)
 
 
 def cmd_complete(args):
@@ -944,6 +959,26 @@ def cmd_models(args):
         sys.exit(1)
 
 
+def cmd_tui(args):
+    """Startet die TUI (Text User Interface)."""
+    try:
+        from mistral_tui import run_tui
+        run_tui()
+    except ImportError as e:
+        print("Fehler: TUI-Module nicht verfügbar.", file=sys.stderr)
+        print(f"Details: {str(e)}", file=sys.stderr)
+        print("Bitte installieren Sie die Abhängigkeiten:", file=sys.stderr)
+        print("  pip install textual", file=sys.stderr)
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
+    except Exception as e:
+        print(f"Fehler beim Start der TUI: {str(e)}", file=sys.stderr)
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description='Mistral AI CLI - Interagiere mit Mistral AI Modellen',
@@ -1054,6 +1089,13 @@ def main():
         help='Liste verfügbare Modelle auf'
     )
     parser_models.set_defaults(func=cmd_models)
+
+    # TUI Command
+    parser_tui = subparsers.add_parser(
+        'tui',
+        help='Starte die interaktive Text User Interface (TUI)'
+    )
+    parser_tui.set_defaults(func=cmd_tui)
 
     # Parse arguments
     args = parser.parse_args()
