@@ -53,19 +53,8 @@ COMPACT_LOGO = r"""
 """
 
 
-# Import der Tool-Funktionen aus der Haupt-CLI
-# Wir importieren die TOOLS und execute_tool Funktion
-import importlib.util
-
-# Lade mistral-cli.py als Modul
-cli_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mistral-cli.py")
-spec = importlib.util.spec_from_file_location("mistral_cli_module", cli_path)
-mistral_cli_module = importlib.util.module_from_spec(spec)
-sys.modules["mistral_cli_module"] = mistral_cli_module
-spec.loader.exec_module(mistral_cli_module)
-
-TOOLS = mistral_cli_module.TOOLS
-execute_tool = mistral_cli_module.execute_tool
+# Import der Tool-Funktionen aus mistral_tools
+from mistral_tools import TOOLS, execute_tool
 
 
 class MistralTUI(App):
