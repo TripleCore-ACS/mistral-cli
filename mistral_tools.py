@@ -2,6 +2,21 @@
 """
 Mistral CLI - Tool Definitions and Execution
 Contains all 13 tools for Mistral AI function calling
+
+Tools:
+1. execute_bash_command - Bash-Befehle ausführen
+2. read_file - Dateien lesen
+3. write_file - Dateien schreiben
+4. fetch_url - URLs abrufen
+5. download_file - Dateien herunterladen
+6. search_web - Web-Suche (DuckDuckGo)
+7. rename_file - Dateien umbenennen
+8. copy_file - Dateien kopieren
+9. move_file - Dateien verschieben
+10. parse_json - JSON parsen
+11. parse_csv - CSV parsen
+12. upload_ftp - FTP Upload
+13. get_image_info - Bild-Informationen
 """
 
 import os
@@ -9,15 +24,28 @@ import subprocess
 import json
 import shutil
 import csv
+import html
+import re
 from urllib.request import urlopen, Request
 from urllib.error import URLError, HTTPError
 from urllib.parse import quote_plus
-import html
 from ftplib import FTP
+from typing import Dict, Any, List, Optional
+
+# Lokale Imports
+from mistral_utils import (
+    logger,
+    is_dangerous_command,
+    sanitize_path,
+    DEFAULT_TIMEOUT,
+)
 
 
+# ============================================================================
 # Tool-Definitionen für Function Calling
-TOOLS = [
+# ============================================================================
+
+TOOLS: List[Dict[str, Any]] = [
     {
         "type": "function",
         "function": {
@@ -252,7 +280,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "upload_ftp",
-            "description": "Lädt eine Datei via FTP auf einen Server hoch",
+            "description": "Lädt eine Datei via FTP auf einen Server hoch. Hinweis: Verwende Umgebungsvariablen für sensible Daten.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -266,18 +294,18 @@ TOOLS = [
                     },
                     "username": {
                         "type": "string",
-                        "description": "FTP-Benutzername"
+                        "description": "FTP-Benutzername (oder Umgebungsvariable FTP_USER)"
                     },
                     "password": {
                         "type": "string",
-                        "description": "FTP-Passwort"
+                        "description": "FTP-Passwort (oder Umgebungsvariable FTP_PASS)"
                     },
                     "remote_path": {
                         "type": "string",
                         "description": "Zielpfad auf dem FTP-Server"
                     }
                 },
-                "required": ["local_file", "host", "username", "password", "remote_path"]
+                "required": ["local_file", "host", "remote_path"]
             }
         }
     },
@@ -301,393 +329,637 @@ TOOLS = [
 ]
 
 
-def execute_tool(tool_name, tool_args, auto_confirm=False):
-    """Führt ein Tool aus und gibt das Ergebnis zurück."""
+# ============================================================================
+# Hilfsfunktionen
+# ============================================================================
 
-    if tool_name == "execute_bash_command":
-        command = tool_args.get("command")
-        explanation = tool_args.get("explanation", "")
+def _get_user_confirmation(prompt: str) -> bool:
+    """
+    Fragt den Benutzer nach Bestätigung.
+    
+    Args:
+        prompt: Die Frage an den Benutzer
+    
+    Returns:
+        True wenn bestätigt, False sonst
+    """
+    response = input(f"  {prompt} (y/n): ").strip().lower()
+    return response in ['y', 'yes', 'j', 'ja']
 
-        print(f"\n[Tool Call] Bash-Befehl ausführen:")
-        print(f"  Befehl: {command}")
-        print(f"  Erklärung: {explanation}")
 
-        if not auto_confirm:
-            response = input("  Ausführen? (y/n): ").strip().lower()
-            if response not in ['y', 'yes', 'j', 'ja']:
-                return {"success": False, "output": "Benutzer hat Ausführung abgelehnt"}
+def _create_result(
+    success: bool,
+    message: Optional[str] = None,
+    error: Optional[str] = None,
+    **kwargs: Any
+) -> Dict[str, Any]:
+    """
+    Erstellt ein standardisiertes Ergebnis-Dictionary.
+    
+    Args:
+        success: Ob die Operation erfolgreich war
+        message: Erfolgsmeldung
+        error: Fehlermeldung
+        **kwargs: Zusätzliche Felder
+    
+    Returns:
+        Ergebnis-Dictionary
+    """
+    result: Dict[str, Any] = {"success": success}
+    if message:
+        result["message"] = message
+    if error:
+        result["error"] = error
+    result.update(kwargs)
+    return result
 
+
+# ============================================================================
+# Tool-Implementierungen
+# ============================================================================
+
+def _execute_bash_command(
+    command: str,
+    explanation: str,
+    auto_confirm: bool
+) -> Dict[str, Any]:
+    """Führt einen Bash-Befehl aus."""
+    logger.info(f"Bash-Befehl: {command}")
+    logger.debug(f"Erklärung: {explanation}")
+
+    print(f"\n[Tool Call] Bash-Befehl ausführen:")
+    print(f"  Befehl: {command}")
+    print(f"  Erklärung: {explanation}")
+
+    # Sicherheitsprüfung
+    if is_dangerous_command(command):
+        logger.warning(f"Gefährlicher Befehl blockiert: {command}")
+        print("  ⚠️  WARNUNG: Potenziell gefährlicher Befehl erkannt!")
+        return _create_result(
+            success=False,
+            error="Gefährlicher Befehl wurde blockiert. Bitte verwende sichere Alternativen."
+        )
+
+    if not auto_confirm and not _get_user_confirmation("Ausführen?"):
+        logger.info("Benutzer hat Ausführung abgelehnt")
+        return _create_result(success=False, output="Benutzer hat Ausführung abgelehnt")
+
+    try:
+        result = subprocess.run(
+            command,
+            shell=True,
+            capture_output=True,
+            text=True,
+            cwd=os.getcwd(),
+            timeout=DEFAULT_TIMEOUT
+        )
+
+        output = result.stdout if result.stdout else result.stderr
+        logger.info(f"Befehl ausgeführt, Exit-Code: {result.returncode}")
+        
+        return _create_result(
+            success=result.returncode == 0,
+            output=output,
+            exit_code=result.returncode
+        )
+    except subprocess.TimeoutExpired:
+        logger.error(f"Timeout bei Befehl: {command}")
+        return _create_result(success=False, output=f"Befehl hat Timeout überschritten ({DEFAULT_TIMEOUT}s)")
+    except Exception as e:
+        logger.error(f"Fehler bei Befehl: {e}")
+        return _create_result(success=False, error=str(e))
+
+
+def _read_file(file_path: str) -> Dict[str, Any]:
+    """Liest den Inhalt einer Datei."""
+    logger.info(f"Datei lesen: {file_path}")
+    print(f"\n[Tool Call] Datei lesen: {file_path}")
+
+    try:
+        path = sanitize_path(file_path)
+        with open(path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        logger.info(f"Datei gelesen: {len(content)} Zeichen")
+        return _create_result(success=True, content=content)
+    except FileNotFoundError:
+        logger.error(f"Datei nicht gefunden: {file_path}")
+        return _create_result(success=False, error=f"Datei nicht gefunden: {file_path}")
+    except Exception as e:
+        logger.error(f"Fehler beim Lesen: {e}")
+        return _create_result(success=False, error=str(e))
+
+
+def _write_file(
+    file_path: str,
+    content: str,
+    auto_confirm: bool
+) -> Dict[str, Any]:
+    """Schreibt Inhalt in eine Datei."""
+    logger.info(f"Datei schreiben: {file_path}")
+    
+    print(f"\n[Tool Call] Datei schreiben: {file_path}")
+    preview = content[:100] + "..." if len(content) > 100 else content
+    print(f"  Inhalt: {preview}")
+
+    if not auto_confirm and not _get_user_confirmation("Schreiben?"):
+        logger.info("Benutzer hat Schreiben abgelehnt")
+        return _create_result(success=False, error="Benutzer hat Schreiben abgelehnt")
+
+    try:
+        path = sanitize_path(file_path)
+        # Erstelle Verzeichnis falls nötig
+        os.makedirs(os.path.dirname(path) or '.', exist_ok=True)
+        
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        logger.info(f"Datei geschrieben: {len(content)} Zeichen")
+        return _create_result(success=True, message="Datei erfolgreich geschrieben")
+    except Exception as e:
+        logger.error(f"Fehler beim Schreiben: {e}")
+        return _create_result(success=False, error=str(e))
+
+
+def _fetch_url(url: str, method: str = "GET") -> Dict[str, Any]:
+    """Ruft den Inhalt einer URL ab."""
+    logger.info(f"URL abrufen: {url} ({method})")
+    
+    print(f"\n[Tool Call] URL abrufen: {url}")
+    print(f"  Methode: {method}")
+
+    try:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
+        req = Request(url, headers=headers, method=method)
+        
+        with urlopen(req, timeout=DEFAULT_TIMEOUT) as response:
+            content = response.read().decode('utf-8')
+            content_type = response.headers.get('Content-Type', '')
+
+            # Begrenze die Ausgabe auf 10000 Zeichen
+            if len(content) > 10000:
+                content = content[:10000] + "\n... (gekürzt)"
+
+            logger.info(f"URL abgerufen: {len(content)} Zeichen, Status: {response.status}")
+            return _create_result(
+                success=True,
+                content=content,
+                content_type=content_type,
+                status_code=response.status
+            )
+    except HTTPError as e:
+        logger.error(f"HTTP Fehler: {e.code} {e.reason}")
+        return _create_result(success=False, error=f"HTTP Fehler {e.code}: {e.reason}")
+    except URLError as e:
+        logger.error(f"URL Fehler: {e.reason}")
+        return _create_result(success=False, error=f"URL Fehler: {str(e.reason)}")
+    except Exception as e:
+        logger.error(f"Fehler beim Abrufen: {e}")
+        return _create_result(success=False, error=str(e))
+
+
+def _download_file(
+    url: str,
+    destination: str,
+    auto_confirm: bool
+) -> Dict[str, Any]:
+    """Lädt eine Datei herunter."""
+    logger.info(f"Download: {url} -> {destination}")
+    
+    print(f"\n[Tool Call] Datei herunterladen:")
+    print(f"  Von: {url}")
+    print(f"  Nach: {destination}")
+
+    if not auto_confirm and not _get_user_confirmation("Herunterladen?"):
+        logger.info("Benutzer hat Download abgelehnt")
+        return _create_result(success=False, error="Benutzer hat Download abgelehnt")
+
+    try:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36'
+        }
+        req = Request(url, headers=headers)
+
+        with urlopen(req, timeout=DEFAULT_TIMEOUT) as response:
+            content = response.read()
+
+            dest_path = sanitize_path(destination)
+            # Erstelle Verzeichnis falls nötig
+            os.makedirs(os.path.dirname(dest_path) or '.', exist_ok=True)
+            
+            with open(dest_path, 'wb') as f:
+                f.write(content)
+
+            file_size = len(content)
+            logger.info(f"Download erfolgreich: {file_size} Bytes")
+            return _create_result(
+                success=True,
+                message=f"Datei erfolgreich heruntergeladen ({file_size} Bytes)",
+                file_size=file_size,
+                destination=dest_path
+            )
+    except HTTPError as e:
+        logger.error(f"HTTP Fehler beim Download: {e.code}")
+        return _create_result(success=False, error=f"HTTP Fehler {e.code}: {e.reason}")
+    except URLError as e:
+        logger.error(f"URL Fehler beim Download: {e.reason}")
+        return _create_result(success=False, error=f"URL Fehler: {str(e.reason)}")
+    except Exception as e:
+        logger.error(f"Download-Fehler: {e}")
+        return _create_result(success=False, error=str(e))
+
+
+def _search_web(query: str, num_results: int = 5) -> Dict[str, Any]:
+    """Sucht im Web mit DuckDuckGo."""
+    logger.info(f"Web-Suche: '{query}' (max {num_results} Ergebnisse)")
+    
+    print(f"\n[Tool Call] Web-Suche: '{query}'")
+    print(f"  Anzahl Ergebnisse: {num_results}")
+
+    try:
+        # Verwende DuckDuckGo HTML (keine API-Key erforderlich)
+        search_url = f"https://html.duckduckgo.com/html/?q={quote_plus(query)}"
+
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36'
+        }
+        req = Request(search_url, headers=headers)
+
+        with urlopen(req, timeout=DEFAULT_TIMEOUT) as response:
+            html_content = response.read().decode('utf-8')
+
+        # Einfaches Parsing der Suchergebnisse (Regex-basiert)
+        results: List[Dict[str, str]] = []
+
+        # Finde Ergebnisse im HTML
+        result_pattern = r'<a rel="nofollow" class="result__a" href="([^"]+)">([^<]+)</a>'
+        snippet_pattern = r'<a class="result__snippet"[^>]*>([^<]+)</a>'
+
+        matches = re.findall(result_pattern, html_content)
+        snippets = re.findall(snippet_pattern, html_content)
+
+        for i, (url, title) in enumerate(matches[:num_results]):
+            snippet = snippets[i] if i < len(snippets) else ""
+            # Dekodiere HTML-Entities
+            title = html.unescape(title)
+            snippet = html.unescape(snippet)
+
+            results.append({
+                "title": title,
+                "url": url,
+                "snippet": snippet
+            })
+
+        if not results:
+            logger.warning(f"Keine Suchergebnisse für: {query}")
+            return _create_result(success=False, error="Keine Suchergebnisse gefunden")
+
+        logger.info(f"Suche erfolgreich: {len(results)} Ergebnisse")
+        return _create_result(
+            success=True,
+            query=query,
+            results=results,
+            num_results=len(results)
+        )
+    except Exception as e:
+        logger.error(f"Suche fehlgeschlagen: {e}")
+        return _create_result(success=False, error=f"Suche fehlgeschlagen: {str(e)}")
+
+
+def _rename_file(
+    old_path: str,
+    new_path: str,
+    auto_confirm: bool
+) -> Dict[str, Any]:
+    """Benennt eine Datei um."""
+    logger.info(f"Umbenennen: {old_path} -> {new_path}")
+    
+    print(f"\n[Tool Call] Datei umbenennen:")
+    print(f"  Von: {old_path}")
+    print(f"  Nach: {new_path}")
+
+    if not auto_confirm and not _get_user_confirmation("Umbenennen?"):
+        logger.info("Benutzer hat Umbenennen abgelehnt")
+        return _create_result(success=False, error="Benutzer hat Umbenennen abgelehnt")
+
+    try:
+        old = sanitize_path(old_path)
+        new = sanitize_path(new_path)
+        os.rename(old, new)
+        logger.info("Umbenennen erfolgreich")
+        return _create_result(success=True, message=f"Erfolgreich umbenannt von {old} zu {new}")
+    except Exception as e:
+        logger.error(f"Umbenennen fehlgeschlagen: {e}")
+        return _create_result(success=False, error=str(e))
+
+
+def _copy_file(
+    source: str,
+    destination: str,
+    auto_confirm: bool
+) -> Dict[str, Any]:
+    """Kopiert eine Datei oder einen Ordner."""
+    logger.info(f"Kopieren: {source} -> {destination}")
+    
+    print(f"\n[Tool Call] Datei/Ordner kopieren:")
+    print(f"  Von: {source}")
+    print(f"  Nach: {destination}")
+
+    if not auto_confirm and not _get_user_confirmation("Kopieren?"):
+        logger.info("Benutzer hat Kopieren abgelehnt")
+        return _create_result(success=False, error="Benutzer hat Kopieren abgelehnt")
+
+    try:
+        src = sanitize_path(source)
+        dst = sanitize_path(destination)
+
+        if os.path.isdir(src):
+            shutil.copytree(src, dst)
+        else:
+            # Erstelle Zielverzeichnis falls nötig
+            os.makedirs(os.path.dirname(dst) or '.', exist_ok=True)
+            shutil.copy2(src, dst)
+
+        logger.info("Kopieren erfolgreich")
+        return _create_result(success=True, message=f"Erfolgreich kopiert von {src} zu {dst}")
+    except Exception as e:
+        logger.error(f"Kopieren fehlgeschlagen: {e}")
+        return _create_result(success=False, error=str(e))
+
+
+def _move_file(
+    source: str,
+    destination: str,
+    auto_confirm: bool
+) -> Dict[str, Any]:
+    """Verschiebt eine Datei oder einen Ordner."""
+    logger.info(f"Verschieben: {source} -> {destination}")
+    
+    print(f"\n[Tool Call] Datei/Ordner verschieben:")
+    print(f"  Von: {source}")
+    print(f"  Nach: {destination}")
+
+    if not auto_confirm and not _get_user_confirmation("Verschieben?"):
+        logger.info("Benutzer hat Verschieben abgelehnt")
+        return _create_result(success=False, error="Benutzer hat Verschieben abgelehnt")
+
+    try:
+        src = sanitize_path(source)
+        dst = sanitize_path(destination)
+        # Erstelle Zielverzeichnis falls nötig
+        os.makedirs(os.path.dirname(dst) or '.', exist_ok=True)
+        shutil.move(src, dst)
+        logger.info("Verschieben erfolgreich")
+        return _create_result(success=True, message=f"Erfolgreich verschoben von {src} zu {dst}")
+    except Exception as e:
+        logger.error(f"Verschieben fehlgeschlagen: {e}")
+        return _create_result(success=False, error=str(e))
+
+
+def _parse_json(json_string: str, query: Optional[str] = None) -> Dict[str, Any]:
+    """Parst JSON-Daten."""
+    logger.info(f"JSON parsen, Query: {query}")
+    
+    print(f"\n[Tool Call] JSON parsen")
+    if query:
+        print(f"  Query: {query}")
+
+    try:
+        data = json.loads(json_string)
+
+        # Wenn ein Query angegeben ist, versuche den Wert zu extrahieren
+        if query:
+            keys = query.split('.')
+            result = data
+            for key in keys:
+                if isinstance(result, dict):
+                    result = result.get(key)
+                elif isinstance(result, list) and key.isdigit():
+                    result = result[int(key)]
+                else:
+                    logger.warning(f"Key nicht gefunden: {key}")
+                    return _create_result(success=False, error=f"Key '{key}' nicht gefunden")
+
+            return _create_result(success=True, data=result)
+        else:
+            return _create_result(success=True, data=data)
+
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON Parsing Fehler: {e}")
+        return _create_result(success=False, error=f"JSON Parsing Fehler: {str(e)}")
+    except Exception as e:
+        logger.error(f"Fehler beim JSON Parsing: {e}")
+        return _create_result(success=False, error=str(e))
+
+
+def _parse_csv(file_path: str, delimiter: str = ",") -> Dict[str, Any]:
+    """Liest und parst CSV-Daten."""
+    logger.info(f"CSV parsen: {file_path}")
+    
+    print(f"\n[Tool Call] CSV-Datei parsen: {file_path}")
+
+    try:
+        path = sanitize_path(file_path)
+        with open(path, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f, delimiter=delimiter)
+            rows = list(reader)
+
+        logger.info(f"CSV gelesen: {len(rows)} Zeilen")
+        return _create_result(
+            success=True,
+            data=rows,
+            num_rows=len(rows),
+            columns=list(rows[0].keys()) if rows else []
+        )
+    except FileNotFoundError:
+        logger.error(f"CSV nicht gefunden: {file_path}")
+        return _create_result(success=False, error=f"Datei nicht gefunden: {file_path}")
+    except Exception as e:
+        logger.error(f"CSV Parsing Fehler: {e}")
+        return _create_result(success=False, error=str(e))
+
+
+def _upload_ftp(
+    local_file: str,
+    host: str,
+    username: Optional[str],
+    password: Optional[str],
+    remote_path: str,
+    auto_confirm: bool
+) -> Dict[str, Any]:
+    """Lädt eine Datei via FTP hoch."""
+    # Verwende Umgebungsvariablen als Fallback für Credentials
+    ftp_user = username or os.environ.get('FTP_USER', '')
+    ftp_pass = password or os.environ.get('FTP_PASS', '')
+    
+    logger.info(f"FTP Upload: {local_file} -> {host}:{remote_path}")
+    
+    print(f"\n[Tool Call] FTP Upload:")
+    print(f"  Lokale Datei: {local_file}")
+    print(f"  Server: {host}")
+    print(f"  Remote Pfad: {remote_path}")
+    print(f"  Benutzer: {ftp_user or '(aus Umgebungsvariable)'}")
+
+    if not ftp_user or not ftp_pass:
+        logger.error("FTP Credentials fehlen")
+        return _create_result(
+            success=False,
+            error="FTP Credentials fehlen. Setze FTP_USER und FTP_PASS Umgebungsvariablen oder übergebe sie direkt."
+        )
+
+    if not auto_confirm and not _get_user_confirmation("Hochladen?"):
+        logger.info("Benutzer hat Upload abgelehnt")
+        return _create_result(success=False, error="Benutzer hat Upload abgelehnt")
+
+    try:
+        local = sanitize_path(local_file)
+
+        with FTP(host, timeout=DEFAULT_TIMEOUT) as ftp:
+            ftp.login(ftp_user, ftp_pass)
+
+            with open(local, 'rb') as f:
+                ftp.storbinary(f'STOR {remote_path}', f)
+
+        logger.info("FTP Upload erfolgreich")
+        return _create_result(
+            success=True,
+            message=f"Datei erfolgreich hochgeladen zu {host}:{remote_path}"
+        )
+    except Exception as e:
+        logger.error(f"FTP Upload fehlgeschlagen: {e}")
+        return _create_result(success=False, error=f"FTP Upload fehlgeschlagen: {str(e)}")
+
+
+def _get_image_info(image_path: str) -> Dict[str, Any]:
+    """Analysiert ein Bild."""
+    logger.info(f"Bild analysieren: {image_path}")
+    
+    print(f"\n[Tool Call] Bild analysieren: {image_path}")
+
+    try:
+        path = sanitize_path(image_path)
+        
+        if not os.path.exists(path):
+            logger.error(f"Bild nicht gefunden: {image_path}")
+            return _create_result(success=False, error="Datei nicht gefunden")
+
+        # Versuche PIL/Pillow zu importieren (optional)
         try:
-            result = subprocess.run(
-                command,
-                shell=True,
-                capture_output=True,
-                text=True,
-                cwd=os.getcwd(),
-                timeout=30
+            from PIL import Image
+
+            with Image.open(path) as img:
+                result = _create_result(
+                    success=True,
+                    format=img.format,
+                    mode=img.mode,
+                    size=img.size,
+                    width=img.width,
+                    height=img.height,
+                    file_size=os.path.getsize(path)
+                )
+                logger.info(f"Bild analysiert: {img.format} {img.width}x{img.height}")
+                return result
+                
+        except ImportError:
+            # Fallback ohne PIL - nur Dateigröße
+            file_size = os.path.getsize(path)
+            logger.info(f"Bild-Dateigröße (ohne PIL): {file_size} Bytes")
+            return _create_result(
+                success=True,
+                file_size=file_size,
+                message="PIL nicht installiert - nur Dateigröße verfügbar. Installiere mit: pip install Pillow"
             )
 
-            output = result.stdout if result.stdout else result.stderr
-            return {
-                "success": result.returncode == 0,
-                "output": output,
-                "exit_code": result.returncode
-            }
-        except subprocess.TimeoutExpired:
-            return {"success": False, "output": "Befehl hat Timeout überschritten (30s)"}
-        except Exception as e:
-            return {"success": False, "output": f"Fehler: {str(e)}"}
-
-    elif tool_name == "read_file":
-        file_path = tool_args.get("file_path")
-
-        print(f"\n[Tool Call] Datei lesen: {file_path}")
-
-        try:
-            with open(os.path.expanduser(file_path), 'r') as f:
-                content = f.read()
-            return {"success": True, "content": content}
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-
-    elif tool_name == "write_file":
-        file_path = tool_args.get("file_path")
-        content = tool_args.get("content")
-
-        print(f"\n[Tool Call] Datei schreiben: {file_path}")
-        print(f"  Inhalt: {content[:100]}..." if len(content) > 100 else f"  Inhalt: {content}")
-
-        if not auto_confirm:
-            response = input("  Schreiben? (y/n): ").strip().lower()
-            if response not in ['y', 'yes', 'j', 'ja']:
-                return {"success": False, "error": "Benutzer hat Schreiben abgelehnt"}
-
-        try:
-            with open(os.path.expanduser(file_path), 'w') as f:
-                f.write(content)
-            return {"success": True, "message": "Datei erfolgreich geschrieben"}
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-
-    elif tool_name == "fetch_url":
-        url = tool_args.get("url")
-        method = tool_args.get("method", "GET")
-
-        print(f"\n[Tool Call] URL abrufen: {url}")
-        print(f"  Methode: {method}")
-
-        try:
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36'
-            }
-            req = Request(url, headers=headers)
-            with urlopen(req, timeout=10) as response:
-                content = response.read().decode('utf-8')
-                content_type = response.headers.get('Content-Type', '')
-
-                # Begrenze die Ausgabe auf 10000 Zeichen
-                if len(content) > 10000:
-                    content = content[:10000] + "\n... (gekürzt)"
-
-                return {
-                    "success": True,
-                    "content": content,
-                    "content_type": content_type,
-                    "status_code": response.status
-                }
-        except HTTPError as e:
-            return {"success": False, "error": f"HTTP Fehler {e.code}: {e.reason}"}
-        except URLError as e:
-            return {"success": False, "error": f"URL Fehler: {str(e.reason)}"}
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-
-    elif tool_name == "download_file":
-        url = tool_args.get("url")
-        destination = tool_args.get("destination")
-
-        print(f"\n[Tool Call] Datei herunterladen:")
-        print(f"  Von: {url}")
-        print(f"  Nach: {destination}")
-
-        if not auto_confirm:
-            response = input("  Herunterladen? (y/n): ").strip().lower()
-            if response not in ['y', 'yes', 'j', 'ja']:
-                return {"success": False, "error": "Benutzer hat Download abgelehnt"}
-
-        try:
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36'
-            }
-            req = Request(url, headers=headers)
-
-            with urlopen(req, timeout=30) as response:
-                content = response.read()
-
-                dest_path = os.path.expanduser(destination)
-                with open(dest_path, 'wb') as f:
-                    f.write(content)
-
-                file_size = len(content)
-                return {
-                    "success": True,
-                    "message": f"Datei erfolgreich heruntergeladen ({file_size} Bytes)",
-                    "file_size": file_size,
-                    "destination": dest_path
-                }
-        except HTTPError as e:
-            return {"success": False, "error": f"HTTP Fehler {e.code}: {e.reason}"}
-        except URLError as e:
-            return {"success": False, "error": f"URL Fehler: {str(e.reason)}"}
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-
-    elif tool_name == "search_web":
-        query = tool_args.get("query")
-        num_results = tool_args.get("num_results", 5)
-
-        print(f"\n[Tool Call] Web-Suche: '{query}'")
-        print(f"  Anzahl Ergebnisse: {num_results}")
-
-        try:
-            # Verwende DuckDuckGo HTML (keine API-Key erforderlich)
-            search_url = f"https://html.duckduckgo.com/html/?q={quote_plus(query)}"
-
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36'
-            }
-            req = Request(search_url, headers=headers)
-
-            with urlopen(req, timeout=10) as response:
-                html_content = response.read().decode('utf-8')
-
-            # Einfaches Parsing der Suchergebnisse (Regex-basiert)
-            results = []
-
-            # Finde Ergebnisse im HTML
-            import re
-            result_pattern = r'<a rel="nofollow" class="result__a" href="([^"]+)">([^<]+)</a>'
-            snippet_pattern = r'<a class="result__snippet"[^>]*>([^<]+)</a>'
-
-            matches = re.findall(result_pattern, html_content)
-            snippets = re.findall(snippet_pattern, html_content)
-
-            for i, (url, title) in enumerate(matches[:num_results]):
-                snippet = snippets[i] if i < len(snippets) else ""
-                # Dekodiere HTML-Entities
-                title = html.unescape(title)
-                snippet = html.unescape(snippet)
-
-                results.append({
-                    "title": title,
-                    "url": url,
-                    "snippet": snippet
-                })
-
-            if not results:
-                return {
-                    "success": False,
-                    "error": "Keine Suchergebnisse gefunden"
-                }
-
-            return {
-                "success": True,
-                "query": query,
-                "results": results,
-                "num_results": len(results)
-            }
-        except Exception as e:
-            return {"success": False, "error": f"Suche fehlgeschlagen: {str(e)}"}
-
-    elif tool_name == "rename_file":
-        old_path = tool_args.get("old_path")
-        new_path = tool_args.get("new_path")
-
-        print(f"\n[Tool Call] Datei umbenennen:")
-        print(f"  Von: {old_path}")
-        print(f"  Nach: {new_path}")
-
-        if not auto_confirm:
-            response = input("  Umbenennen? (y/n): ").strip().lower()
-            if response not in ['y', 'yes', 'j', 'ja']:
-                return {"success": False, "error": "Benutzer hat Umbenennen abgelehnt"}
-
-        try:
-            old_path = os.path.expanduser(old_path)
-            new_path = os.path.expanduser(new_path)
-            os.rename(old_path, new_path)
-            return {"success": True, "message": f"Erfolgreich umbenannt von {old_path} zu {new_path}"}
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-
-    elif tool_name == "copy_file":
-        source = tool_args.get("source")
-        destination = tool_args.get("destination")
-
-        print(f"\n[Tool Call] Datei/Ordner kopieren:")
-        print(f"  Von: {source}")
-        print(f"  Nach: {destination}")
-
-        if not auto_confirm:
-            response = input("  Kopieren? (y/n): ").strip().lower()
-            if response not in ['y', 'yes', 'j', 'ja']:
-                return {"success": False, "error": "Benutzer hat Kopieren abgelehnt"}
-
-        try:
-            source = os.path.expanduser(source)
-            destination = os.path.expanduser(destination)
-
-            if os.path.isdir(source):
-                shutil.copytree(source, destination)
-            else:
-                shutil.copy2(source, destination)
-
-            return {"success": True, "message": f"Erfolgreich kopiert von {source} zu {destination}"}
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-
-    elif tool_name == "move_file":
-        source = tool_args.get("source")
-        destination = tool_args.get("destination")
-
-        print(f"\n[Tool Call] Datei/Ordner verschieben:")
-        print(f"  Von: {source}")
-        print(f"  Nach: {destination}")
-
-        if not auto_confirm:
-            response = input("  Verschieben? (y/n): ").strip().lower()
-            if response not in ['y', 'yes', 'j', 'ja']:
-                return {"success": False, "error": "Benutzer hat Verschieben abgelehnt"}
-
-        try:
-            source = os.path.expanduser(source)
-            destination = os.path.expanduser(destination)
-            shutil.move(source, destination)
-            return {"success": True, "message": f"Erfolgreich verschoben von {source} zu {destination}"}
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-
-    elif tool_name == "parse_json":
-        json_string = tool_args.get("json_string")
-        query = tool_args.get("query")
-
-        print(f"\n[Tool Call] JSON parsen")
-        if query:
-            print(f"  Query: {query}")
-
-        try:
-            data = json.loads(json_string)
-
-            # Wenn ein Query angegeben ist, versuche den Wert zu extrahieren
-            if query:
-                keys = query.split('.')
-                result = data
-                for key in keys:
-                    if isinstance(result, dict):
-                        result = result.get(key)
-                    elif isinstance(result, list) and key.isdigit():
-                        result = result[int(key)]
-                    else:
-                        return {"success": False, "error": f"Key '{key}' nicht gefunden"}
-
-                return {"success": True, "data": result}
-            else:
-                return {"success": True, "data": data}
-
-        except json.JSONDecodeError as e:
-            return {"success": False, "error": f"JSON Parsing Fehler: {str(e)}"}
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-
-    elif tool_name == "parse_csv":
-        file_path = tool_args.get("file_path")
-        delimiter = tool_args.get("delimiter", ",")
-
-        print(f"\n[Tool Call] CSV-Datei parsen: {file_path}")
-
-        try:
-            file_path = os.path.expanduser(file_path)
-            with open(file_path, 'r', encoding='utf-8') as f:
-                reader = csv.DictReader(f, delimiter=delimiter)
-                rows = list(reader)
-
-            return {
-                "success": True,
-                "data": rows,
-                "num_rows": len(rows),
-                "columns": list(rows[0].keys()) if rows else []
-            }
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-
-    elif tool_name == "upload_ftp":
-        local_file = tool_args.get("local_file")
-        host = tool_args.get("host")
-        username = tool_args.get("username")
-        password = tool_args.get("password")
-        remote_path = tool_args.get("remote_path")
-
-        print(f"\n[Tool Call] FTP Upload:")
-        print(f"  Lokale Datei: {local_file}")
-        print(f"  Server: {host}")
-        print(f"  Remote Pfad: {remote_path}")
-
-        if not auto_confirm:
-            response = input("  Hochladen? (y/n): ").strip().lower()
-            if response not in ['y', 'yes', 'j', 'ja']:
-                return {"success": False, "error": "Benutzer hat Upload abgelehnt"}
-
-        try:
-            local_file = os.path.expanduser(local_file)
-
-            with FTP(host) as ftp:
-                ftp.login(username, password)
-
-                with open(local_file, 'rb') as f:
-                    ftp.storbinary(f'STOR {remote_path}', f)
-
-            return {
-                "success": True,
-                "message": f"Datei erfolgreich hochgeladen zu {host}:{remote_path}"
-            }
-        except Exception as e:
-            return {"success": False, "error": f"FTP Upload fehlgeschlagen: {str(e)}"}
-
-    elif tool_name == "get_image_info":
-        image_path = tool_args.get("image_path")
-
-        print(f"\n[Tool Call] Bild analysieren: {image_path}")
-
-        try:
-            # Versuche PIL/Pillow zu importieren (optional)
-            try:
-                from PIL import Image
-
-                image_path = os.path.expanduser(image_path)
-                with Image.open(image_path) as img:
-                    return {
-                        "success": True,
-                        "format": img.format,
-                        "mode": img.mode,
-                        "size": img.size,
-                        "width": img.width,
-                        "height": img.height,
-                        "file_size": os.path.getsize(image_path)
-                    }
-            except ImportError:
-                # Fallback ohne PIL - nur Dateigröße
-                image_path = os.path.expanduser(image_path)
-                if os.path.exists(image_path):
-                    file_size = os.path.getsize(image_path)
-                    return {
-                        "success": True,
-                        "file_size": file_size,
-                        "message": "PIL nicht installiert - nur Dateigröße verfügbar. Installiere mit: pip install Pillow"
-                    }
-                else:
-                    return {"success": False, "error": "Datei nicht gefunden"}
-
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-
-    return {"success": False, "error": f"Unbekanntes Tool: {tool_name}"}
+    except Exception as e:
+        logger.error(f"Bildanalyse fehlgeschlagen: {e}")
+        return _create_result(success=False, error=str(e))
+
+
+# ============================================================================
+# Tool-Dispatcher
+# ============================================================================
+
+def execute_tool(
+    tool_name: str,
+    tool_args: Dict[str, Any],
+    auto_confirm: bool = False
+) -> Dict[str, Any]:
+    """
+    Führt ein Tool aus und gibt das Ergebnis zurück.
+    
+    Args:
+        tool_name: Name des Tools
+        tool_args: Argumente für das Tool
+        auto_confirm: Ob Aktionen automatisch bestätigt werden
+    
+    Returns:
+        Ergebnis-Dictionary mit success, message/error und weiteren Daten
+    """
+    logger.debug(f"Tool ausführen: {tool_name} mit Args: {tool_args}")
+
+    # Tool-Dispatcher
+    tool_handlers = {
+        "execute_bash_command": lambda: _execute_bash_command(
+            tool_args.get("command", ""),
+            tool_args.get("explanation", ""),
+            auto_confirm
+        ),
+        "read_file": lambda: _read_file(tool_args.get("file_path", "")),
+        "write_file": lambda: _write_file(
+            tool_args.get("file_path", ""),
+            tool_args.get("content", ""),
+            auto_confirm
+        ),
+        "fetch_url": lambda: _fetch_url(
+            tool_args.get("url", ""),
+            tool_args.get("method", "GET")
+        ),
+        "download_file": lambda: _download_file(
+            tool_args.get("url", ""),
+            tool_args.get("destination", ""),
+            auto_confirm
+        ),
+        "search_web": lambda: _search_web(
+            tool_args.get("query", ""),
+            tool_args.get("num_results", 5)
+        ),
+        "rename_file": lambda: _rename_file(
+            tool_args.get("old_path", ""),
+            tool_args.get("new_path", ""),
+            auto_confirm
+        ),
+        "copy_file": lambda: _copy_file(
+            tool_args.get("source", ""),
+            tool_args.get("destination", ""),
+            auto_confirm
+        ),
+        "move_file": lambda: _move_file(
+            tool_args.get("source", ""),
+            tool_args.get("destination", ""),
+            auto_confirm
+        ),
+        "parse_json": lambda: _parse_json(
+            tool_args.get("json_string", ""),
+            tool_args.get("query")
+        ),
+        "parse_csv": lambda: _parse_csv(
+            tool_args.get("file_path", ""),
+            tool_args.get("delimiter", ",")
+        ),
+        "upload_ftp": lambda: _upload_ftp(
+            tool_args.get("local_file", ""),
+            tool_args.get("host", ""),
+            tool_args.get("username"),
+            tool_args.get("password"),
+            tool_args.get("remote_path", ""),
+            auto_confirm
+        ),
+        "get_image_info": lambda: _get_image_info(tool_args.get("image_path", ""))
+    }
+
+    handler = tool_handlers.get(tool_name)
+    if handler:
+        return handler()
+    else:
+        logger.error(f"Unbekanntes Tool: {tool_name}")
+        return _create_result(success=False, error=f"Unbekanntes Tool: {tool_name}")

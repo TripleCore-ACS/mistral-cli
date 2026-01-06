@@ -1,17 +1,60 @@
 # Mistral CLI - Dependencies
+# https://github.com/TripleCore-ACS/mistral-cli
 
-# Core dependency - Mistral AI Python SDK
+# ==============================================================================
+# Core Dependencies (Required)
+# ==============================================================================
+
+# Mistral AI Python SDK
 mistralai>=1.0.0
 
-# TUI (Text User Interface) dependency
+# Environment variable management (.env files)
+python-dotenv>=1.0.0
+
+# ==============================================================================
+# TUI Dependencies (Optional - for 'mistral tui' command)
+# ==============================================================================
+
+# Text User Interface framework
 textual>=0.47.0
 
-# Optional dependencies for enhanced features
-# Uncomment if needed:
+# ==============================================================================
+# Optional Dependencies (Enhanced Features)
+# ==============================================================================
 
-# Image processing (for get_image_info tool)
+# Image processing (for get_image_info tool with full metadata)
+# Uncomment to enable:
 # Pillow>=10.0.0
 
-# Additional useful packages (optional)
-# requests>=2.31.0  # Alternative HTTP client
-# beautifulsoup4>=4.12.0  # HTML parsing
+# Alternative HTTP client (more features than urllib)
+# Uncomment to enable:
+# requests>=2.31.0
+
+# HTML parsing (for better web scraping)
+# Uncomment to enable:
+# beautifulsoup4>=4.12.0
+
+# ==============================================================================
+# Development Dependencies (for contributors)
+# ==============================================================================
+
+# Uncomment for development:
+# pytest>=7.4.0
+# pytest-cov>=4.1.0
+# black>=23.0.0
+# flake8>=6.1.0
+# mypy>=1.5.0
+
+# ==============================================================================
+# Installation
+# ==============================================================================
+# 
+# Basic installation:
+#   pip install -r requirements.txt
+#
+# With optional image support:
+#   pip install -r requirements.txt Pillow
+#
+# Development installation:
+#   pip install -r requirements.txt pytest black flake8 mypy
+#
