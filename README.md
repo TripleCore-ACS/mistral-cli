@@ -321,7 +321,16 @@ cat ~/.mistral-cli.log
 ```bash
 # Erweiterte Bildverarbeitung
 pip install Pillow
-
+```
+```bash
+# Pfeiltasten-Support macOS
+pip install gnureadline
+```
+```bash
+# Pfeiltasten-Support Windows
+pip install pyreadline3
+```
+```bash
 # Entwicklung
 pip install pytest black flake8 mypy
 ```
