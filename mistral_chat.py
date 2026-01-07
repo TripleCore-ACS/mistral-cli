@@ -7,9 +7,157 @@ Interactive chat with tool support and token management
 import sys
 import json
 import argparse
+import atexit
+from pathlib import Path
 from typing import List, Dict, Any, Optional
 
+# ============================================================================
+# Readline Setup für Pfeiltasten und History
+# ============================================================================
+
+READLINE_AVAILABLE = False
+READLINE_TYPE = "none"
+
+# History-Datei für persistente Command-History
+HISTORY_FILE = Path.home() / ".mistral-cli_history"
+HISTORY_LENGTH = 1000
+
+def _detect_readline_type() -> str:
+    """Erkennt welche readline-Bibliothek verwendet wird."""
+    try:
+        import readline
+        doc = getattr(readline, '__doc__', '') or ''
+        if 'libedit' in doc.lower():
+            return 'libedit'
+        elif 'gnu' in doc.lower():
+            return 'gnu'
+        else:
+            # Prüfe auf GNU readline Funktionen
+            if hasattr(readline, 'append_history_file'):
+                return 'gnu'
+            return 'unknown'
+    except ImportError:
+        return 'none'
+
+
+def _setup_readline_gnu() -> bool:
+    """Konfiguriert GNU readline."""
+    try:
+        import readline
+        
+        # History laden
+        if HISTORY_FILE.exists():
+            try:
+                readline.read_history_file(HISTORY_FILE)
+            except (IOError, OSError):
+                pass
+        
+        # History-Länge setzen
+        readline.set_history_length(HISTORY_LENGTH)
+        
+        # History beim Beenden speichern
+        atexit.register(readline.write_history_file, HISTORY_FILE)
+        
+        # Standard Emacs-Bindings (funktionieren normalerweise)
+        readline.parse_and_bind('tab: self-insert')
+        readline.parse_and_bind('"\\e[A": previous-history')  # Up
+        readline.parse_and_bind('"\\e[B": next-history')      # Down
+        readline.parse_and_bind('"\\e[C": forward-char')      # Right
+        readline.parse_and_bind('"\\e[D": backward-char')     # Left
+        
+        return True
+    except Exception:
+        return False
+
+
+def _setup_readline_libedit() -> bool:
+    """Konfiguriert libedit (macOS Standard)."""
+    try:
+        import readline
+        
+        # History laden
+        if HISTORY_FILE.exists():
+            try:
+                readline.read_history_file(HISTORY_FILE)
+            except (IOError, OSError):
+                pass
+        
+        # History-Länge setzen
+        readline.set_history_length(HISTORY_LENGTH)
+        
+        # History beim Beenden speichern
+        atexit.register(readline.write_history_file, HISTORY_FILE)
+        
+        # libedit-spezifische Bindings (unterschiedliche Syntax!)
+        readline.parse_and_bind('bind ^I rl_complete')  # Tab
+        readline.parse_and_bind('bind -e')  # Emacs-Modus aktivieren
+        
+        # Pfeiltasten sollten in libedit standardmäßig funktionieren
+        # wenn Emacs-Modus aktiv ist
+        
+        return True
+    except Exception:
+        return False
+
+
+def _setup_readline_windows() -> bool:
+    """Konfiguriert pyreadline3 für Windows."""
+    try:
+        import pyreadline3 as readline
+        
+        # History laden
+        if HISTORY_FILE.exists():
+            try:
+                readline.read_history_file(str(HISTORY_FILE))
+            except (IOError, OSError):
+                pass
+        
+        # History-Länge setzen
+        readline.set_history_length(HISTORY_LENGTH)
+        
+        # History beim Beenden speichern
+        atexit.register(readline.write_history_file, str(HISTORY_FILE))
+        
+        return True
+    except ImportError:
+        return False
+    except Exception:
+        return False
+
+
+def setup_readline() -> tuple:
+    """
+    Konfiguriert readline für Pfeiltasten und History.
+    Erkennt automatisch die richtige Bibliothek (GNU, libedit, pyreadline3).
+    
+    Returns:
+        Tuple (erfolg: bool, typ: str)
+    """
+    global READLINE_AVAILABLE, READLINE_TYPE
+    
+    # Erst prüfen welcher Typ
+    READLINE_TYPE = _detect_readline_type()
+    
+    if READLINE_TYPE == 'gnu':
+        READLINE_AVAILABLE = _setup_readline_gnu()
+    elif READLINE_TYPE == 'libedit':
+        READLINE_AVAILABLE = _setup_readline_libedit()
+    elif READLINE_TYPE == 'none':
+        # Versuche Windows-Fallback
+        READLINE_AVAILABLE = _setup_readline_windows()
+        if READLINE_AVAILABLE:
+            READLINE_TYPE = 'pyreadline3'
+    else:
+        # Unknown - versuche GNU-Setup
+        READLINE_AVAILABLE = _setup_readline_gnu()
+    
+    return (READLINE_AVAILABLE, READLINE_TYPE)
+
+
+# ============================================================================
 # Lokale Imports
+# ============================================================================
+
 from mistral_utils import (
     get_client,
     logger,
@@ -21,7 +169,10 @@ from mistral_utils import (
 from mistral_tools import TOOLS, execute_tool
 
 
+# ============================================================================
 # ASCII Logo
+# ============================================================================
+
 LOGO = r"""
 ┌─────────────────────────────────────────────────────┐
 │ ███╗   ███╗██╗███████╗████████╗██████╗  █████╗ ██╗  │
@@ -35,18 +186,31 @@ LOGO = r"""
 """
 
 
-def print_welcome(model: str) -> None:
+# ============================================================================
+# Hilfsfunktionen
+# ============================================================================
+
+def print_welcome(model: str, readline_info: tuple) -> None:
     """
     Zeigt die Willkommensnachricht an.
     
     Args:
         model: Das verwendete Modell
+        readline_info: Tuple (verfügbar, typ)
     """
+    available, rl_type = readline_info
+    
     print(LOGO)
     print("Bienvenue! 🇫🇷\n")
     print("Mistral AI Chat with Tool Support")
     print("(Enter 'exit', 'quit' or 'q' to exit)")
     print("(Enter 'clear' to clear conversation history)")
+    
+    if available:
+        print(f"(Use ↑↓ arrow keys for command history) [{rl_type}]")
+    else:
+        print("(⚠️  Arrow keys not available - install 'gnureadline' for macOS)")
+    
     print(f"Model: {model}")
     print("\nAvailable Tools:")
     print("  - Bash commands, Files (read/write/rename/copy/move)")
@@ -134,6 +298,10 @@ def process_tool_calls(
         return None
 
 
+# ============================================================================
+# Hauptfunktion
+# ============================================================================
+
 def cmd_chat(args: argparse.Namespace) -> None:
     """
     Interaktiver Chat-Modus mit Tool-Unterstützung.
@@ -141,6 +309,15 @@ def cmd_chat(args: argparse.Namespace) -> None:
     Args:
         args: Kommandozeilen-Argumente mit model, temperature, max_tokens, yes
     """
+    # Readline für Pfeiltasten und History aktivieren
+    readline_info = setup_readline()
+    available, rl_type = readline_info
+    
+    if available:
+        logger.debug(f"Readline aktiviert: {rl_type}")
+    else:
+        logger.warning("Readline nicht verfügbar - Pfeiltasten deaktiviert")
+    
     client = get_client()
     
     # Parameter extrahieren
@@ -151,7 +328,7 @@ def cmd_chat(args: argparse.Namespace) -> None:
     
     logger.info(f"Chat gestartet mit Modell: {model}, Temp: {temperature}, MaxTokens: {max_tokens}")
 
-    print_welcome(model)
+    print_welcome(model, readline_info)
 
     messages: List[Dict[str, Any]] = []
     
@@ -170,6 +347,24 @@ def cmd_chat(args: argparse.Namespace) -> None:
                 messages = []
                 print("🗑️  Konversation gelöscht.\n")
                 logger.info("Konversation gelöscht")
+                continue
+
+            # History-Befehl (zeigt letzte Eingaben)
+            if user_input.lower() == 'history':
+                if READLINE_AVAILABLE:
+                    import readline
+                    history_len = readline.get_current_history_length()
+                    print(f"\n📜 Letzte {min(10, history_len)} Eingaben:")
+                    for i in range(max(1, history_len - 9), history_len + 1):
+                        try:
+                            item = readline.get_history_item(i)
+                            if item:
+                                print(f"  {i}: {item}")
+                        except Exception:
+                            pass
+                    print()
+                else:
+                    print("⚠️  History nicht verfügbar (readline nicht installiert)\n")
                 continue
 
             # Leere Eingabe ignorieren
@@ -226,12 +421,20 @@ def cmd_chat(args: argparse.Namespace) -> None:
             print("\n\nAu revoir! 👋")
             logger.info("Chat beendet durch Keyboard Interrupt")
             break
+        except EOFError:
+            # Ctrl+D
+            print("\nAu revoir! 👋")
+            logger.info("Chat beendet durch EOF")
+            break
         except Exception as e:
             logger.error(f"Fehler im Chat: {e}")
             print(f"\n❌ Fehler: {str(e)}\n", file=sys.stderr)
 
 
-# Für direkten Aufruf (z.B. zum Testen)
+# ============================================================================
+# Direkter Aufruf
+# ============================================================================
+
 if __name__ == '__main__':
     # Einfache Test-Args erstellen
     class TestArgs:

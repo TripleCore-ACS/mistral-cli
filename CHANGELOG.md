@@ -7,9 +7,33 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.1.1] - 2025-01-07
+
+### Behoben
+
+- **Pfeiltasten im Chat-Modus** ⌨️
+  - Verbesserte readline-Erkennung für macOS (libedit vs GNU readline)
+  - Automatische Erkennung der readline-Variante (gnu, libedit, pyreadline3)
+  - Separate Konfiguration für jede Variante
+  - Zeigt readline-Typ in der Willkommensnachricht an
+  - Bessere Fehlermeldung wenn readline nicht verfügbar
+
+- **Neue Chat-Befehle**
+  - `history` - Zeigt die letzten 10 Eingaben an
+
+- **Verbesserte Eingabebehandlung**
+  - EOFError (Ctrl+D) wird sauber abgefangen
+  - Explizite Pfeiltasten-Bindings für GNU readline
+
+### Dokumentation
+
+- requirements.txt: Anleitung für `gnureadline` (macOS) und `pyreadline3` (Windows)
+
+---
+
 ## [1.1.0] - 2025-01-07
 
-### 🆕 Hinzugefügt
+### Hinzugefügt
 
 - **Neues Modul `mistral_utils.py`** - Zentrales Utilities-Modul mit:
   - `get_client()` - Singleton-Pattern für Mistral Client (keine Duplikation mehr)
@@ -49,7 +73,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   - Vollständige Type Annotations in allen Modulen
   - Verbesserte IDE-Unterstützung und Autovervollständigung
 
-### ♻️ Geändert
+### Geändert
 
 - **`mistral_cli.py`**
   - Nutzt jetzt `mistral_utils` statt eigener `get_client()` Funktion
@@ -75,13 +99,13 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   - Bessere Dokumentation und Kategorisierung
   - Entwicklungs-Abhängigkeiten dokumentiert (pytest, black, etc.)
 
-### 🔧 Behoben
+### Behoben
 
 - Duplizierter Code für `get_client()` in mehreren Dateien
 - Fehlende Fehlerbehandlung bei ungültigen Tool-Argumenten (JSON-Parsing)
 - Potenzielle Token-Limit-Überschreitungen bei langen Chats
 
-### 📚 Dokumentation
+### Dokumentation
 
 - README.md aktualisiert mit neuen Features
 - Neue Abschnitte: Logging, .env Konfiguration, Debug-Modus
@@ -91,7 +115,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [1.0.5] - 2025-01-06
 
-### 🆕 Hinzugefügt
+### Hinzugefügt
 
 - Initial Public Release
 - Interaktiver Chat-Modus mit Function Calling
@@ -117,5 +141,6 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+[1.1.1]: https://github.com/TripleCore-ACS/mistral-cli/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/TripleCore-ACS/mistral-cli/compare/v1.0.5...v1.1.0
 [1.0.5]: https://github.com/TripleCore-ACS/mistral-cli/releases/tag/v1.0.5

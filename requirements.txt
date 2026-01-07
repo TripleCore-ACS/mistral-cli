@@ -19,6 +19,19 @@ python-dotenv>=1.0.0
 textual>=0.47.0
 
 # ==============================================================================
+# Readline Support (For Arrow Keys & Command History)
+# ==============================================================================
+
+# macOS: The built-in libedit often has issues with arrow keys.
+# Install gnureadline for proper GNU readline support:
+# pip install gnureadline
+
+# Windows: pyreadline3 provides readline functionality:
+# pip install pyreadline3
+
+# Linux: readline is usually built-in and works correctly.
+
+# ==============================================================================
 # Optional Dependencies (Enhanced Features)
 # ==============================================================================
 
@@ -51,6 +64,12 @@ textual>=0.47.0
 # 
 # Basic installation:
 #   pip install -r requirements.txt
+#
+# macOS with arrow key support:
+#   pip install -r requirements.txt gnureadline
+#
+# Windows with arrow key support:
+#   pip install -r requirements.txt pyreadline3
 #
 # With optional image support:
 #   pip install -r requirements.txt Pillow
