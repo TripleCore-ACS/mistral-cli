@@ -33,7 +33,13 @@ Eine leistungsstarke Kommandozeilenanwendung für Mistral AI mit erweiterten Too
 - CSV-Dateien lesen und analysieren
 - Bildanalyse (Format, Größe, Dimensionen)
 
-### 🆕 Neu in v1.1.0
+### Neu in v1.1.0
+
+- **Bugfix: Pfeiltasten im Chat-Modus**
+- **Neue Chat-Befehle** - `history` - Zeigt die letzten 10 Eingaben an
+- **Verbesserte Eingabebehandlung** - EOFError (Ctrl+D) wird sauber abgefangen
+  
+### v1.1.0
 
 - **Zentrales Logging** - Alle Aktionen werden in `~/.mistral-cli.log` protokolliert
 - **`.env` Support** - API-Keys und Konfiguration via `.env`-Dateien
@@ -239,6 +245,34 @@ Log-Einträge enthalten:
 - Modul und Funktion
 - Nachricht
 
+## Pfeiltasten & Command History
+
+Die CLI unterstützt Pfeiltasten (↑↓) für die Befehlshistorie und (←→) für Cursor-Navigation.
+
+| Plattform | Status | Aktion |
+|-----------|--------|--------|
+| **Linux** | ✅ Funktioniert | Keine Aktion nötig |
+| **macOS** | ⚠️ libedit | `pip install gnureadline` für volle Unterstützung |
+| **Windows** | ⚠️ Optional | `pip install pyreadline3` |
+
+### macOS Fix
+```bash
+pip install gnureadline
+```
+
+Nach der Installation zeigt der Chat:
+```
+(Use ↑↓ arrow keys for command history) [gnu]
+```
+
+### Nützliche Chat-Befehle
+| Befehl | Beschreibung |
+|--------|--------------|
+| `↑` / `↓` | Vorherige/Nächste Eingabe |
+| `history` | Zeigt letzte 10 Eingaben |
+| `clear` | Löscht Konversation |
+| `exit` | Beendet Chat |
+
 ## Sicherheit
 
 - **Bestätigungspflicht**: Alle destruktiven Operationen erfordern Bestätigung (außer mit `-y` Flag)
@@ -253,6 +287,7 @@ Log-Einträge enthalten:
 Folgende Befehlsmuster werden automatisch blockiert:
 - `rm -rf /` und Varianten
 - Fork-Bombs (`:(){:|:&};:`)
+- Remote Code Execution (`curl | bash`)
 - Destruktive `dd`-Befehle
 - Pipe-zu-Shell von externen Quellen (`curl | sh`)
 
