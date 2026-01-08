@@ -36,7 +36,13 @@ from typing import Dict, Any, List, Optional
 from mistral_utils import (
     logger,
     is_dangerous_command,
+    get_command_risk_info,
+    format_risk_warning,
     sanitize_path,
+    validate_url,
+    validate_path,
+    check_file_operation_safety,
+    RiskLevel,
     DEFAULT_TIMEOUT,
 )
 
@@ -50,7 +56,7 @@ TOOLS: List[Dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "execute_bash_command",
-            "description": "Führt einen Bash-Befehl auf dem System aus. Verwende dies, um Dateien zu erstellen, Ordner anzulegen, Programme auszuführen, etc.",
+            "description": "Führt einen Bash-Befehl auf dem System aus. Verwende dies, um Dateien zu erstellen, Ordner anzulegen, Programme auszuführen, etc. HINWEIS: Gefährliche Befehle werden automatisch blockiert.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -71,7 +77,7 @@ TOOLS: List[Dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "read_file",
-            "description": "Liest den Inhalt einer Datei",
+            "description": "Liest den Inhalt einer Datei. HINWEIS: Zugriff auf Systemdateien ist eingeschränkt.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -88,7 +94,7 @@ TOOLS: List[Dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "write_file",
-            "description": "Schreibt Inhalt in eine Datei (erstellt oder überschreibt)",
+            "description": "Schreibt Inhalt in eine Datei (erstellt oder überschreibt). HINWEIS: Schreiben in Systemverzeichnisse ist nicht erlaubt.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -109,7 +115,7 @@ TOOLS: List[Dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "fetch_url",
-            "description": "Ruft den Inhalt einer URL ab (Webseiten, APIs, etc.). Gibt HTML, JSON oder Text zurück.",
+            "description": "Ruft den Inhalt einer URL ab (Webseiten, APIs, etc.). Gibt HTML, JSON oder Text zurück. HINWEIS: Lokale/private IP-Adressen sind blockiert.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -131,7 +137,7 @@ TOOLS: List[Dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "download_file",
-            "description": "Lädt eine Datei von einer URL herunter und speichert sie lokal",
+            "description": "Lädt eine Datei von einer URL herunter und speichert sie lokal. HINWEIS: Downloads von lokalen/privaten IPs sind blockiert.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -162,7 +168,7 @@ TOOLS: List[Dict[str, Any]] = [
                     },
                     "num_results": {
                         "type": "integer",
-                        "description": "Anzahl der gewünschten Ergebnisse (Standard: 5)",
+                        "description": "Anzahl der gewünschten Ergebnisse (Standard: 5, Maximum: 10)",
                         "default": 5
                     }
                 },
@@ -280,7 +286,7 @@ TOOLS: List[Dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "upload_ftp",
-            "description": "Lädt eine Datei via FTP auf einen Server hoch. Hinweis: Verwende Umgebungsvariablen für sensible Daten.",
+            "description": "Lädt eine Datei via FTP auf einen Server hoch. HINWEIS: Verwende Umgebungsvariablen FTP_USER und FTP_PASS für Credentials.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -294,11 +300,11 @@ TOOLS: List[Dict[str, Any]] = [
                     },
                     "username": {
                         "type": "string",
-                        "description": "FTP-Benutzername (oder Umgebungsvariable FTP_USER)"
+                        "description": "FTP-Benutzername (optional, nutzt FTP_USER Env-Variable)"
                     },
                     "password": {
                         "type": "string",
-                        "description": "FTP-Passwort (oder Umgebungsvariable FTP_PASS)"
+                        "description": "FTP-Passwort (optional, nutzt FTP_PASS Env-Variable)"
                     },
                     "remote_path": {
                         "type": "string",
@@ -383,7 +389,7 @@ def _execute_bash_command(
     explanation: str,
     auto_confirm: bool
 ) -> Dict[str, Any]:
-    """Führt einen Bash-Befehl aus."""
+    """Führt einen Bash-Befehl aus mit erweiterter Sicherheitsprüfung."""
     logger.info(f"Bash-Befehl: {command}")
     logger.debug(f"Erklärung: {explanation}")
 
@@ -391,18 +397,29 @@ def _execute_bash_command(
     print(f"  Befehl: {command}")
     print(f"  Erklärung: {explanation}")
 
-    # Sicherheitsprüfung
-    if is_dangerous_command(command):
+    # Erweiterte Sicherheitsprüfung
+    risk_info = get_command_risk_info(command)
+    
+    if risk_info["is_blocked"]:
         logger.warning(f"Gefährlicher Befehl blockiert: {command}")
-        print("  ⚠️  WARNUNG: Potenziell gefährlicher Befehl erkannt!")
+        print(format_risk_warning(risk_info))
         return _create_result(
             success=False,
-            error="Gefährlicher Befehl wurde blockiert. Bitte verwende sichere Alternativen."
+            error=f"Befehl blockiert: {risk_info['description']}",
+            risk_level=risk_info["risk_level"],
+            category=risk_info["category"]
         )
+    
+    if risk_info["needs_confirmation"]:
+        print(format_risk_warning(risk_info))
+        if not _get_user_confirmation("Trotzdem ausführen?"):
+            logger.info("Benutzer hat Ausführung eines Medium-Risk Befehls abgelehnt")
+            return _create_result(success=False, output="Benutzer hat Ausführung abgelehnt")
 
-    if not auto_confirm and not _get_user_confirmation("Ausführen?"):
-        logger.info("Benutzer hat Ausführung abgelehnt")
-        return _create_result(success=False, output="Benutzer hat Ausführung abgelehnt")
+    if not auto_confirm and risk_info["risk_level"] == "SAFE":
+        if not _get_user_confirmation("Ausführen?"):
+            logger.info("Benutzer hat Ausführung abgelehnt")
+            return _create_result(success=False, output="Benutzer hat Ausführung abgelehnt")
 
     try:
         result = subprocess.run(
@@ -431,9 +448,16 @@ def _execute_bash_command(
 
 
 def _read_file(file_path: str) -> Dict[str, Any]:
-    """Liest den Inhalt einer Datei."""
+    """Liest den Inhalt einer Datei mit Pfad-Validierung."""
     logger.info(f"Datei lesen: {file_path}")
     print(f"\n[Tool Call] Datei lesen: {file_path}")
+
+    # Pfad-Validierung
+    is_safe, message = validate_path(file_path)
+    if not is_safe:
+        logger.warning(f"Pfad-Validierung fehlgeschlagen: {file_path} - {message}")
+        print(f"  ⚠️  {message}")
+        return _create_result(success=False, error=message)
 
     try:
         path = sanitize_path(file_path)
@@ -444,6 +468,9 @@ def _read_file(file_path: str) -> Dict[str, Any]:
     except FileNotFoundError:
         logger.error(f"Datei nicht gefunden: {file_path}")
         return _create_result(success=False, error=f"Datei nicht gefunden: {file_path}")
+    except PermissionError:
+        logger.error(f"Keine Berechtigung: {file_path}")
+        return _create_result(success=False, error=f"Keine Berechtigung zum Lesen: {file_path}")
     except Exception as e:
         logger.error(f"Fehler beim Lesen: {e}")
         return _create_result(success=False, error=str(e))
@@ -454,12 +481,19 @@ def _write_file(
     content: str,
     auto_confirm: bool
 ) -> Dict[str, Any]:
-    """Schreibt Inhalt in eine Datei."""
+    """Schreibt Inhalt in eine Datei mit Pfad-Validierung."""
     logger.info(f"Datei schreiben: {file_path}")
     
     print(f"\n[Tool Call] Datei schreiben: {file_path}")
     preview = content[:100] + "..." if len(content) > 100 else content
     print(f"  Inhalt: {preview}")
+
+    # Pfad-Validierung
+    is_safe, message = validate_path(file_path)
+    if not is_safe:
+        logger.warning(f"Pfad-Validierung fehlgeschlagen: {file_path} - {message}")
+        print(f"  ⚠️  {message}")
+        return _create_result(success=False, error=message)
 
     if not auto_confirm and not _get_user_confirmation("Schreiben?"):
         logger.info("Benutzer hat Schreiben abgelehnt")
@@ -468,23 +502,35 @@ def _write_file(
     try:
         path = sanitize_path(file_path)
         # Erstelle Verzeichnis falls nötig
-        os.makedirs(os.path.dirname(path) or '.', exist_ok=True)
+        parent_dir = os.path.dirname(path)
+        if parent_dir:
+            os.makedirs(parent_dir, exist_ok=True)
         
         with open(path, 'w', encoding='utf-8') as f:
             f.write(content)
         logger.info(f"Datei geschrieben: {len(content)} Zeichen")
         return _create_result(success=True, message="Datei erfolgreich geschrieben")
+    except PermissionError:
+        logger.error(f"Keine Schreibberechtigung: {file_path}")
+        return _create_result(success=False, error=f"Keine Schreibberechtigung: {file_path}")
     except Exception as e:
         logger.error(f"Fehler beim Schreiben: {e}")
         return _create_result(success=False, error=str(e))
 
 
 def _fetch_url(url: str, method: str = "GET") -> Dict[str, Any]:
-    """Ruft den Inhalt einer URL ab."""
+    """Ruft den Inhalt einer URL ab mit URL-Validierung."""
     logger.info(f"URL abrufen: {url} ({method})")
     
     print(f"\n[Tool Call] URL abrufen: {url}")
     print(f"  Methode: {method}")
+
+    # URL-Validierung
+    is_safe, message = validate_url(url)
+    if not is_safe:
+        logger.warning(f"URL-Validierung fehlgeschlagen: {url} - {message}")
+        print(f"  ⚠️  {message}")
+        return _create_result(success=False, error=message)
 
     try:
         headers = {
@@ -523,12 +569,26 @@ def _download_file(
     destination: str,
     auto_confirm: bool
 ) -> Dict[str, Any]:
-    """Lädt eine Datei herunter."""
+    """Lädt eine Datei herunter mit URL- und Pfad-Validierung."""
     logger.info(f"Download: {url} -> {destination}")
     
     print(f"\n[Tool Call] Datei herunterladen:")
     print(f"  Von: {url}")
     print(f"  Nach: {destination}")
+
+    # URL-Validierung
+    is_safe, message = validate_url(url)
+    if not is_safe:
+        logger.warning(f"URL-Validierung fehlgeschlagen: {url} - {message}")
+        print(f"  ⚠️  URL: {message}")
+        return _create_result(success=False, error=f"URL unsicher: {message}")
+
+    # Pfad-Validierung
+    is_safe, message = validate_path(destination)
+    if not is_safe:
+        logger.warning(f"Pfad-Validierung fehlgeschlagen: {destination} - {message}")
+        print(f"  ⚠️  Pfad: {message}")
+        return _create_result(success=False, error=f"Pfad unsicher: {message}")
 
     if not auto_confirm and not _get_user_confirmation("Herunterladen?"):
         logger.info("Benutzer hat Download abgelehnt")
@@ -545,7 +605,9 @@ def _download_file(
 
             dest_path = sanitize_path(destination)
             # Erstelle Verzeichnis falls nötig
-            os.makedirs(os.path.dirname(dest_path) or '.', exist_ok=True)
+            parent_dir = os.path.dirname(dest_path)
+            if parent_dir:
+                os.makedirs(parent_dir, exist_ok=True)
             
             with open(dest_path, 'wb') as f:
                 f.write(content)
@@ -571,10 +633,20 @@ def _download_file(
 
 def _search_web(query: str, num_results: int = 5) -> Dict[str, Any]:
     """Sucht im Web mit DuckDuckGo."""
+    # Begrenze Ergebnisse auf maximal 10
+    num_results = min(num_results, 10)
+    
     logger.info(f"Web-Suche: '{query}' (max {num_results} Ergebnisse)")
     
     print(f"\n[Tool Call] Web-Suche: '{query}'")
     print(f"  Anzahl Ergebnisse: {num_results}")
+
+    # Einfache Query-Validierung
+    if len(query) < 2:
+        return _create_result(success=False, error="Suchanfrage zu kurz (min. 2 Zeichen)")
+    
+    if len(query) > 500:
+        return _create_result(success=False, error="Suchanfrage zu lang (max. 500 Zeichen)")
 
     try:
         # Verwende DuckDuckGo HTML (keine API-Key erforderlich)
@@ -631,12 +703,20 @@ def _rename_file(
     new_path: str,
     auto_confirm: bool
 ) -> Dict[str, Any]:
-    """Benennt eine Datei um."""
+    """Benennt eine Datei um mit Pfad-Validierung."""
     logger.info(f"Umbenennen: {old_path} -> {new_path}")
     
     print(f"\n[Tool Call] Datei umbenennen:")
     print(f"  Von: {old_path}")
     print(f"  Nach: {new_path}")
+
+    # Pfad-Validierungen
+    for path, label in [(old_path, "Quellpfad"), (new_path, "Zielpfad")]:
+        is_safe, message = validate_path(path)
+        if not is_safe:
+            logger.warning(f"{label}-Validierung fehlgeschlagen: {path} - {message}")
+            print(f"  ⚠️  {label}: {message}")
+            return _create_result(success=False, error=f"{label} unsicher: {message}")
 
     if not auto_confirm and not _get_user_confirmation("Umbenennen?"):
         logger.info("Benutzer hat Umbenennen abgelehnt")
@@ -648,6 +728,12 @@ def _rename_file(
         os.rename(old, new)
         logger.info("Umbenennen erfolgreich")
         return _create_result(success=True, message=f"Erfolgreich umbenannt von {old} zu {new}")
+    except FileNotFoundError:
+        logger.error(f"Datei nicht gefunden: {old_path}")
+        return _create_result(success=False, error=f"Datei nicht gefunden: {old_path}")
+    except PermissionError:
+        logger.error(f"Keine Berechtigung: {old_path}")
+        return _create_result(success=False, error=f"Keine Berechtigung zum Umbenennen")
     except Exception as e:
         logger.error(f"Umbenennen fehlgeschlagen: {e}")
         return _create_result(success=False, error=str(e))
@@ -658,12 +744,19 @@ def _copy_file(
     destination: str,
     auto_confirm: bool
 ) -> Dict[str, Any]:
-    """Kopiert eine Datei oder einen Ordner."""
+    """Kopiert eine Datei oder einen Ordner mit Sicherheitsprüfung."""
     logger.info(f"Kopieren: {source} -> {destination}")
     
     print(f"\n[Tool Call] Datei/Ordner kopieren:")
     print(f"  Von: {source}")
     print(f"  Nach: {destination}")
+
+    # Sicherheitsprüfung für Dateioperationen
+    is_safe, message = check_file_operation_safety("copy", source, destination)
+    if not is_safe:
+        logger.warning(f"Sicherheitsprüfung fehlgeschlagen: {message}")
+        print(f"  ⚠️  {message}")
+        return _create_result(success=False, error=message)
 
     if not auto_confirm and not _get_user_confirmation("Kopieren?"):
         logger.info("Benutzer hat Kopieren abgelehnt")
@@ -677,11 +770,19 @@ def _copy_file(
             shutil.copytree(src, dst)
         else:
             # Erstelle Zielverzeichnis falls nötig
-            os.makedirs(os.path.dirname(dst) or '.', exist_ok=True)
+            parent_dir = os.path.dirname(dst)
+            if parent_dir:
+                os.makedirs(parent_dir, exist_ok=True)
             shutil.copy2(src, dst)
 
         logger.info("Kopieren erfolgreich")
         return _create_result(success=True, message=f"Erfolgreich kopiert von {src} zu {dst}")
+    except FileNotFoundError:
+        logger.error(f"Datei nicht gefunden: {source}")
+        return _create_result(success=False, error=f"Datei nicht gefunden: {source}")
+    except PermissionError:
+        logger.error(f"Keine Berechtigung zum Kopieren")
+        return _create_result(success=False, error="Keine Berechtigung zum Kopieren")
     except Exception as e:
         logger.error(f"Kopieren fehlgeschlagen: {e}")
         return _create_result(success=False, error=str(e))
@@ -692,12 +793,19 @@ def _move_file(
     destination: str,
     auto_confirm: bool
 ) -> Dict[str, Any]:
-    """Verschiebt eine Datei oder einen Ordner."""
+    """Verschiebt eine Datei oder einen Ordner mit Sicherheitsprüfung."""
     logger.info(f"Verschieben: {source} -> {destination}")
     
     print(f"\n[Tool Call] Datei/Ordner verschieben:")
     print(f"  Von: {source}")
     print(f"  Nach: {destination}")
+
+    # Sicherheitsprüfung für Dateioperationen
+    is_safe, message = check_file_operation_safety("move", source, destination)
+    if not is_safe:
+        logger.warning(f"Sicherheitsprüfung fehlgeschlagen: {message}")
+        print(f"  ⚠️  {message}")
+        return _create_result(success=False, error=message)
 
     if not auto_confirm and not _get_user_confirmation("Verschieben?"):
         logger.info("Benutzer hat Verschieben abgelehnt")
@@ -707,10 +815,18 @@ def _move_file(
         src = sanitize_path(source)
         dst = sanitize_path(destination)
         # Erstelle Zielverzeichnis falls nötig
-        os.makedirs(os.path.dirname(dst) or '.', exist_ok=True)
+        parent_dir = os.path.dirname(dst)
+        if parent_dir:
+            os.makedirs(parent_dir, exist_ok=True)
         shutil.move(src, dst)
         logger.info("Verschieben erfolgreich")
         return _create_result(success=True, message=f"Erfolgreich verschoben von {src} zu {dst}")
+    except FileNotFoundError:
+        logger.error(f"Datei nicht gefunden: {source}")
+        return _create_result(success=False, error=f"Datei nicht gefunden: {source}")
+    except PermissionError:
+        logger.error(f"Keine Berechtigung zum Verschieben")
+        return _create_result(success=False, error="Keine Berechtigung zum Verschieben")
     except Exception as e:
         logger.error(f"Verschieben fehlgeschlagen: {e}")
         return _create_result(success=False, error=str(e))
@@ -723,6 +839,10 @@ def _parse_json(json_string: str, query: Optional[str] = None) -> Dict[str, Any]
     print(f"\n[Tool Call] JSON parsen")
     if query:
         print(f"  Query: {query}")
+
+    # Begrenzen der Eingabelänge
+    if len(json_string) > 1_000_000:  # 1 MB
+        return _create_result(success=False, error="JSON zu groß (max. 1 MB)")
 
     try:
         data = json.loads(json_string)
@@ -753,13 +873,26 @@ def _parse_json(json_string: str, query: Optional[str] = None) -> Dict[str, Any]
 
 
 def _parse_csv(file_path: str, delimiter: str = ",") -> Dict[str, Any]:
-    """Liest und parst CSV-Daten."""
+    """Liest und parst CSV-Daten mit Pfad-Validierung."""
     logger.info(f"CSV parsen: {file_path}")
     
     print(f"\n[Tool Call] CSV-Datei parsen: {file_path}")
 
+    # Pfad-Validierung
+    is_safe, message = validate_path(file_path)
+    if not is_safe:
+        logger.warning(f"Pfad-Validierung fehlgeschlagen: {file_path} - {message}")
+        print(f"  ⚠️  {message}")
+        return _create_result(success=False, error=message)
+
     try:
         path = sanitize_path(file_path)
+        
+        # Prüfe Dateigröße
+        file_size = os.path.getsize(path)
+        if file_size > 10_000_000:  # 10 MB
+            return _create_result(success=False, error="CSV zu groß (max. 10 MB)")
+        
         with open(path, 'r', encoding='utf-8') as f:
             reader = csv.DictReader(f, delimiter=delimiter)
             rows = list(reader)
@@ -774,6 +907,9 @@ def _parse_csv(file_path: str, delimiter: str = ",") -> Dict[str, Any]:
     except FileNotFoundError:
         logger.error(f"CSV nicht gefunden: {file_path}")
         return _create_result(success=False, error=f"Datei nicht gefunden: {file_path}")
+    except PermissionError:
+        logger.error(f"Keine Berechtigung: {file_path}")
+        return _create_result(success=False, error=f"Keine Berechtigung zum Lesen: {file_path}")
     except Exception as e:
         logger.error(f"CSV Parsing Fehler: {e}")
         return _create_result(success=False, error=str(e))
@@ -787,7 +923,7 @@ def _upload_ftp(
     remote_path: str,
     auto_confirm: bool
 ) -> Dict[str, Any]:
-    """Lädt eine Datei via FTP hoch."""
+    """Lädt eine Datei via FTP hoch mit Sicherheitsprüfungen."""
     # Verwende Umgebungsvariablen als Fallback für Credentials
     ftp_user = username or os.environ.get('FTP_USER', '')
     ftp_pass = password or os.environ.get('FTP_PASS', '')
@@ -798,7 +934,14 @@ def _upload_ftp(
     print(f"  Lokale Datei: {local_file}")
     print(f"  Server: {host}")
     print(f"  Remote Pfad: {remote_path}")
-    print(f"  Benutzer: {ftp_user or '(aus Umgebungsvariable)'}")
+    print(f"  Benutzer: {ftp_user or '(nicht gesetzt)'}")
+
+    # Pfad-Validierung für lokale Datei
+    is_safe, message = validate_path(local_file)
+    if not is_safe:
+        logger.warning(f"Pfad-Validierung fehlgeschlagen: {local_file} - {message}")
+        print(f"  ⚠️  {message}")
+        return _create_result(success=False, error=message)
 
     if not ftp_user or not ftp_pass:
         logger.error("FTP Credentials fehlen")
@@ -813,6 +956,9 @@ def _upload_ftp(
 
     try:
         local = sanitize_path(local_file)
+        
+        if not os.path.exists(local):
+            return _create_result(success=False, error=f"Lokale Datei nicht gefunden: {local_file}")
 
         with FTP(host, timeout=DEFAULT_TIMEOUT) as ftp:
             ftp.login(ftp_user, ftp_pass)
@@ -831,10 +977,17 @@ def _upload_ftp(
 
 
 def _get_image_info(image_path: str) -> Dict[str, Any]:
-    """Analysiert ein Bild."""
+    """Analysiert ein Bild mit Pfad-Validierung."""
     logger.info(f"Bild analysieren: {image_path}")
     
     print(f"\n[Tool Call] Bild analysieren: {image_path}")
+
+    # Pfad-Validierung
+    is_safe, message = validate_path(image_path)
+    if not is_safe:
+        logger.warning(f"Pfad-Validierung fehlgeschlagen: {image_path} - {message}")
+        print(f"  ⚠️  {message}")
+        return _create_result(success=False, error=message)
 
     try:
         path = sanitize_path(image_path)
@@ -870,6 +1023,9 @@ def _get_image_info(image_path: str) -> Dict[str, Any]:
                 message="PIL nicht installiert - nur Dateigröße verfügbar. Installiere mit: pip install Pillow"
             )
 
+    except PermissionError:
+        logger.error(f"Keine Berechtigung: {image_path}")
+        return _create_result(success=False, error=f"Keine Berechtigung zum Lesen: {image_path}")
     except Exception as e:
         logger.error(f"Bildanalyse fehlgeschlagen: {e}")
         return _create_result(success=False, error=str(e))
