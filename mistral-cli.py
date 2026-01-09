@@ -316,24 +316,26 @@ def cmd_auth_status(args: argparse.Namespace) -> None:
     
     # Speichermethoden
     print("Verfügbare Speichermethoden:")
-    print(f"  System-Keyring: {'\u2705 verfügbar' if status['keyring_available'] else '\u274c nicht installiert'}")
-    print(f"  AES-Verschlüsselung: {'\u2705 verfügbar' if status['crypto_available'] else '\u274c nicht installiert'}")
+    keyring_status = "✅ verfügbar" if status['keyring_available'] else "❌ nicht installiert"
+    crypto_status = "✅ verfügbar" if status['crypto_available'] else "❌ nicht installiert"
+    print(f"  System-Keyring: {keyring_status}")
+    print(f"  AES-Verschlüsselung: {crypto_status}")
     print()
     
     # Gespeicherte Keys
     print("Gespeicherte API-Keys:")
     if status['keyring_has_key']:
-        print("  \u2705 API-Key im System-Keyring gespeichert")
+        print("  ✅ API-Key im System-Keyring gespeichert")
     elif status['encrypted_file_exists']:
-        print("  \u2705 API-Key verschlüsselt gespeichert")
+        print("  ✅ API-Key verschlüsselt gespeichert")
     elif status['env_var_set']:
-        print("  \u26a0\ufe0f  API-Key nur als Umgebungsvariable gesetzt")
+        print("  ⚠️  API-Key nur als Umgebungsvariable gesetzt")
     else:
-        print("  \u274c Kein API-Key gefunden")
+        print("  ❌ Kein API-Key gefunden")
     print()
     
     if not status['keyring_available'] and not status['crypto_available']:
-        print("\u26a0\ufe0f  Empfehlung: Installiere keyring für sichere Speicherung:")
+        print("⚠️  Empfehlung: Installiere keyring für sichere Speicherung:")
         print("   pip install keyring")
         print()
 
@@ -349,7 +351,7 @@ def cmd_auth_delete(args: argparse.Namespace) -> None:
     
     # Bestätigung anfordern
     if not args.yes:
-        print("\n\u26a0\ufe0f  WARNUNG: Dies löscht den gespeicherten API-Key.")
+        print("\n⚠️  WARNUNG: Dies löscht den gespeicherten API-Key.")
         try:
             response = input("Fortfahren? [j/N]: ").strip().lower()
             if response not in ['j', 'ja', 'y', 'yes']:
@@ -362,9 +364,9 @@ def cmd_auth_delete(args: argparse.Namespace) -> None:
     success, message = delete_stored_api_key()
     
     if success:
-        print(f"\u2705 {message}")
+        print(f"✅ {message}")
     else:
-        print(f"\u274c {message}")
+        print(f"❌ {message}")
     
     sys.exit(0 if success else 1)
 
