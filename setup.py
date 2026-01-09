@@ -18,7 +18,7 @@ def read_requirements():
 
 setup(
     name="mistral-cli",
-    version="1.0.0",
+    version="1.3.0",
     author="Daniel Thun",
     author_email="",  # Optional: Ihre E-Mail hier einfügen
     description="Leistungsstarke CLI für Mistral AI mit erweiterten Tool-Funktionen",
@@ -30,8 +30,18 @@ setup(
     install_requires=read_requirements(),
     extras_require={
         "full": [
-            "Pillow>=10.0.0",  # Für Bildverarbeitung
-        ]
+            "Pillow>=10.0.0",     # Für Bildverarbeitung
+            "paramiko>=3.4.0",    # Für SFTP-Support
+            "keyring>=24.0.0",    # Für sichere API-Key-Speicherung
+            "cryptography>=41.0.0",  # Für AES-Verschlüsselung
+        ],
+        "sftp": [
+            "paramiko>=3.4.0",    # Nur SFTP-Support
+        ],
+        "secure": [
+            "keyring>=24.0.0",    # Sichere API-Key-Speicherung
+            "cryptography>=41.0.0",  # AES-Fallback
+        ],
     },
     classifiers=[
         "Development Status :: 4 - Beta",

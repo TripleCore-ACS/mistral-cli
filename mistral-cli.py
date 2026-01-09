@@ -23,6 +23,10 @@ from mistral_utils import (
     DEFAULT_MODEL,
     DEFAULT_TEMPERATURE,
     DEFAULT_MAX_TOKENS,
+    setup_api_key_interactive,
+    get_api_key_status,
+    delete_stored_api_key,
+    get_version,
 )
 from mistral_tools import TOOLS, execute_tool
 from mistral_chat import cmd_chat
@@ -262,6 +266,109 @@ def cmd_tui(args: argparse.Namespace) -> None:
         sys.exit(1)
 
 
+def cmd_auth(args: argparse.Namespace) -> None:
+    """
+    Zeigt Auth-Hilfe wenn kein Subcommand angegeben.
+    
+    Args:
+        args: Kommandozeilen-Argumente
+    """
+    print()
+    print("🔐 Mistral CLI - API-Key-Verwaltung")
+    print("=" * 40)
+    print()
+    print("Verfügbare Befehle:")
+    print("  mistral auth setup   - API-Key interaktiv einrichten")
+    print("  mistral auth status  - Gespeicherten API-Key Status anzeigen")
+    print("  mistral auth delete  - Gespeicherten API-Key löschen")
+    print()
+    print("Mehr Informationen:")
+    print("  mistral auth <befehl> --help")
+    print()
+
+
+def cmd_auth_setup(args: argparse.Namespace) -> None:
+    """
+    Interaktive API-Key-Einrichtung.
+    
+    Args:
+        args: Kommandozeilen-Argumente
+    """
+    logger.info("Starte API-Key-Einrichtung")
+    success = setup_api_key_interactive()
+    sys.exit(0 if success else 1)
+
+
+def cmd_auth_status(args: argparse.Namespace) -> None:
+    """
+    Zeigt den API-Key-Status an.
+    
+    Args:
+        args: Kommandozeilen-Argumente
+    """
+    logger.info("Zeige API-Key-Status")
+    status = get_api_key_status()
+    
+    print()
+    print("🔐 Mistral CLI - API-Key Status")
+    print("=" * 40)
+    print()
+    
+    # Speichermethoden
+    print("Verfügbare Speichermethoden:")
+    print(f"  System-Keyring: {'\u2705 verfügbar' if status['keyring_available'] else '\u274c nicht installiert'}")
+    print(f"  AES-Verschlüsselung: {'\u2705 verfügbar' if status['crypto_available'] else '\u274c nicht installiert'}")
+    print()
+    
+    # Gespeicherte Keys
+    print("Gespeicherte API-Keys:")
+    if status['keyring_has_key']:
+        print("  \u2705 API-Key im System-Keyring gespeichert")
+    elif status['encrypted_file_exists']:
+        print("  \u2705 API-Key verschlüsselt gespeichert")
+    elif status['env_var_set']:
+        print("  \u26a0\ufe0f  API-Key nur als Umgebungsvariable gesetzt")
+    else:
+        print("  \u274c Kein API-Key gefunden")
+    print()
+    
+    if not status['keyring_available'] and not status['crypto_available']:
+        print("\u26a0\ufe0f  Empfehlung: Installiere keyring für sichere Speicherung:")
+        print("   pip install keyring")
+        print()
+
+
+def cmd_auth_delete(args: argparse.Namespace) -> None:
+    """
+    Löscht den gespeicherten API-Key.
+    
+    Args:
+        args: Kommandozeilen-Argumente
+    """
+    logger.info("Lösche API-Key")
+    
+    # Bestätigung anfordern
+    if not args.yes:
+        print("\n\u26a0\ufe0f  WARNUNG: Dies löscht den gespeicherten API-Key.")
+        try:
+            response = input("Fortfahren? [j/N]: ").strip().lower()
+            if response not in ['j', 'ja', 'y', 'yes']:
+                print("Abgebrochen.")
+                sys.exit(0)
+        except (EOFError, KeyboardInterrupt):
+            print("\nAbgebrochen.")
+            sys.exit(0)
+    
+    success, message = delete_stored_api_key()
+    
+    if success:
+        print(f"\u2705 {message}")
+    else:
+        print(f"\u274c {message}")
+    
+    sys.exit(0 if success else 1)
+
+
 def create_parser() -> argparse.ArgumentParser:
     """
     Erstellt und konfiguriert den Argument-Parser.
@@ -287,7 +394,7 @@ Mehr Informationen: https://github.com/TripleCore-ACS/mistral-cli
     parser.add_argument(
         '--version',
         action='version',
-        version='%(prog)s 1.0.0'
+        version=f'%(prog)s {get_version()}'
     )
     parser.add_argument(
         '--debug',
@@ -421,6 +528,50 @@ Mehr Informationen: https://github.com/TripleCore-ACS/mistral-cli
         description='Startet eine grafische Text-Benutzeroberfläche im Terminal.'
     )
     parser_tui.set_defaults(func=cmd_tui)
+
+    # =========================================================================
+    # Auth Command (API-Key-Verwaltung)
+    # =========================================================================
+    parser_auth = subparsers.add_parser(
+        'auth',
+        help='API-Key-Verwaltung (einrichten, anzeigen, löschen)',
+        description='Sichere Verwaltung des Mistral API-Keys mit System-Keyring oder AES-Verschlüsselung.'
+    )
+    parser_auth.set_defaults(func=cmd_auth)
+    auth_subparsers = parser_auth.add_subparsers(
+        title='Auth-Befehle',
+        description='Verfügbare Auth-Befehle',
+        dest='auth_command'
+    )
+
+    # Auth Setup
+    parser_auth_setup = auth_subparsers.add_parser(
+        'setup',
+        help='API-Key interaktiv einrichten',
+        description='Richtet den API-Key sicher ein (System-Keyring oder AES-verschlüsselt).'
+    )
+    parser_auth_setup.set_defaults(func=cmd_auth_setup)
+
+    # Auth Status
+    parser_auth_status = auth_subparsers.add_parser(
+        'status',
+        help='API-Key-Status anzeigen',
+        description='Zeigt den Status der API-Key-Speicherung an.'
+    )
+    parser_auth_status.set_defaults(func=cmd_auth_status)
+
+    # Auth Delete
+    parser_auth_delete = auth_subparsers.add_parser(
+        'delete',
+        help='Gespeicherten API-Key löschen',
+        description='Löscht den gespeicherten API-Key aus Keyring und verschlüsselter Datei.'
+    )
+    parser_auth_delete.add_argument(
+        '-y', '--yes',
+        action='store_true',
+        help='Löschen ohne Bestätigung'
+    )
+    parser_auth_delete.set_defaults(func=cmd_auth_delete)
 
     return parser
 

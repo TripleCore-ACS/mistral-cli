@@ -35,9 +35,22 @@ textual>=0.47.0
 # Optional Dependencies (Enhanced Features)
 # ==============================================================================
 
+# Secure API-Key storage (recommended)
+# Uses system keyring (macOS Keychain, GNOME Keyring, Windows Credential Manager)
+# Uncomment to enable:
+# keyring>=24.0.0
+
+# AES encryption for API-Key (fallback if keyring unavailable)
+# Uncomment to enable:
+# cryptography>=41.0.0
+
 # Image processing (for get_image_info tool with full metadata)
 # Uncomment to enable:
 # Pillow>=10.0.0
+
+# SFTP Support (for upload_sftp tool - secure file transfer)
+# Uncomment to enable:
+# paramiko>=3.4.0
 
 # Alternative HTTP client (more features than urllib)
 # Uncomment to enable:

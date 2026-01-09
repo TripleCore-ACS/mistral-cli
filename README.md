@@ -15,7 +15,7 @@ Eine leistungsstarke Kommandozeilenanwendung für Mistral AI mit erweiterten Too
 - **Modellübersicht**
 - **TUI-Modus** (Text User Interface)
 
-### 🛠️ 13 Integrierte Tools
+### 🛠️ 14 Integrierte Tools
 
 #### Dateisystem
 - Dateien lesen, schreiben, umbenennen
@@ -26,12 +26,32 @@ Eine leistungsstarke Kommandozeilenanwendung für Mistral AI mit erweiterten Too
 - Web-Suche (DuckDuckGo)
 - URL-Inhalte abrufen
 - Dateien herunterladen
-- FTP-Upload
+- FTP-Upload (unverschlüsselt)
+- **SFTP-Upload (verschlüsselt)** 🆕
 
 #### Datenverarbeitung
 - JSON parsen und durchsuchen
 - CSV-Dateien lesen und analysieren
 - Bildanalyse (Format, Größe, Dimensionen)
+
+### Neu in v1.3.0 🆕
+
+- **Sichere API-Key-Verwaltung** - Kein Klartext mehr in Shell-Configs!
+  - System-Keyring (macOS Keychain, GNOME Keyring, Windows Credential Manager)
+  - AES-256 Verschlüsselung als Fallback
+  - Interaktive Einrichtung: `./mistral auth setup`
+- **SFTP-Support** - Sichere Dateiübertragung via SSH
+  - Passwort-Authentifizierung
+  - SSH-Key-Support (RSA, Ed25519, ECDSA)
+  - Verschlüsselte Alternative zu FTP
+- **14 Tools** - Neues Tool `upload_sftp`
+
+### Neu in v1.2.0
+
+- **Erweiterte Sicherheitsprüfungen** - Command Injection Detection
+- **Log Sanitization** - Keine Credentials in Logs
+- **URL-Validierung** - SSRF-Schutz
+- **Download-Limits** - Max. 100MB
 
 ### Neu in v1.1.0
 
@@ -73,22 +93,24 @@ pip install -r requirements.txt
 
 ### Schritt 4: API-Key konfigurieren
 
-**Option A: Umgebungsvariable (temporär)**
+**Option A: Sichere Einrichtung (empfohlen)** 🆕
+```bash
+./mistral auth setup
+```
+Der API-Key wird sicher im System-Keyring (macOS Keychain, GNOME Keyring, Windows Credential Manager) oder AES-256 verschlüsselt gespeichert.
+
+**Option B: Umgebungsvariable (temporär)**
 ```bash
 export MISTRAL_API_KEY='ihr-api-key-hier'
 ```
 
-**Option B: Shell-Konfiguration (dauerhaft)**
-```bash
-echo 'export MISTRAL_API_KEY="ihr-api-key-hier"' >> ~/.bashrc
-source ~/.bashrc
-```
-
-**Option C: .env-Datei (empfohlen für Entwicklung)** 🆕
+**Option C: .env-Datei (für Entwicklung)**
 ```bash
 echo "MISTRAL_API_KEY=ihr-api-key-hier" > ~/.mistral-cli.env
 ```
 Die Anwendung lädt automatisch `.env` aus dem aktuellen Verzeichnis oder `~/.mistral-cli.env`.
+
+> ⚠️ **Sicherheitshinweis:** Vermeide das Speichern von API-Keys in `.bashrc`/`.zshrc` - diese Dateien werden oft versehentlich in Repositories committed.
 
 ### Schritt 5: Anwendung ausführbar machen
 ```bash
@@ -113,6 +135,7 @@ You: Erstelle einen Ordner ~/projects/test
 You: Suche nach "Python best practices" und zeige die ersten 3 Ergebnisse
 You: Lade https://example.com/data.json herunter und parse die JSON-Daten
 You: Analysiere das Bild ~/photo.jpg
+You: Lade report.pdf via SFTP auf server.example.com hoch
 You: clear                          # Konversation löschen
 You: exit                           # Chat beenden
 ```
@@ -157,6 +180,18 @@ You: exit                           # Chat beenden
 ./mistral tui
 ```
 
+### API-Key-Verwaltung 🆕
+```bash
+# API-Key sicher einrichten (interaktiv)
+./mistral auth setup
+
+# Status der API-Key-Speicherung anzeigen
+./mistral auth status
+
+# Gespeicherten API-Key löschen
+./mistral auth delete
+```
+
 ## Konfiguration
 
 ### CLI-Optionen
@@ -188,6 +223,9 @@ You: exit                           # Chat beenden
 | `MISTRAL_API_KEY` | Mistral AI API-Key (erforderlich) |
 | `FTP_USER` | FTP-Benutzername (optional) |
 | `FTP_PASS` | FTP-Passwort (optional) |
+| `SFTP_USER` | SFTP-Benutzername (optional) 🆕 |
+| `SFTP_PASS` | SFTP-Passwort (optional) 🆕 |
+| `SFTP_KEY_PATH` | Pfad zum SSH Private Key (optional) 🆕 |
 
 ## Tool-Übersicht
 
@@ -202,7 +240,8 @@ You: exit                           # Chat beenden
 | `fetch_url` | Ruft URL-Inhalte ab |
 | `download_file` | Lädt Dateien herunter |
 | `search_web` | Sucht im Internet (DuckDuckGo) |
-| `upload_ftp` | Lädt Dateien via FTP hoch |
+| `upload_ftp` | Lädt Dateien via FTP hoch (unverschlüsselt) |
+| `upload_sftp` | Lädt Dateien via SFTP hoch (verschlüsselt) 🆕 |
 | `parse_json` | Parst JSON-Daten |
 | `parse_csv` | Liest CSV-Dateien |
 | `get_image_info` | Analysiert Bilder |
@@ -275,11 +314,12 @@ Nach der Installation zeigt der Chat:
 
 ## Sicherheit
 
+- **Sichere API-Key-Speicherung**: System-Keyring oder AES-256 Verschlüsselung 🆕
 - **Bestätigungspflicht**: Alle destruktiven Operationen erfordern Bestätigung (außer mit `-y` Flag)
-- **Gefährliche Befehle**: Automatische Blockierung von `rm -rf /`, Fork-Bombs, etc. 🆕
+- **Gefährliche Befehle**: Automatische Blockierung von `rm -rf /`, Fork-Bombs, etc.
+- **SFTP statt FTP**: Verschlüsselte Dateiübertragung für sensible Daten
 - **Timeouts**: Web-Requests haben automatische Timeouts (30 Sekunden)
 - **Error-Handling**: Robuste Fehlerbehandlung für alle Operationen
-- **API-Key**: Wird nur aus Umgebungsvariablen oder `.env` gelesen
 - **Logging**: Alle Aktionen werden protokolliert (ohne sensible Daten)
 
 ### Blockierte Befehle 🆕
@@ -318,6 +358,18 @@ cat ~/.mistral-cli.log
 
 ## Optionale Abhängigkeiten
 
+```bash
+# Sichere API-Key-Speicherung (empfohlen) 🆕
+pip install keyring
+```
+```bash
+# AES-Verschlüsselung für API-Key (Fallback)
+pip install cryptography
+```
+```bash
+# SFTP-Support (verschlüsselte Dateiübertragung)
+pip install paramiko
+```
 ```bash
 # Erweiterte Bildverarbeitung
 pip install Pillow

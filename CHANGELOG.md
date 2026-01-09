@@ -7,6 +7,69 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.3.0] - 2025-01-08
+
+### 🔐 Hinzugefügt - Sichere API-Key-Verwaltung
+
+- **Neuer Befehl: `mistral auth`**
+  - `mistral auth setup` - Interaktive API-Key-Einrichtung
+  - `mistral auth status` - Zeigt Speicher-Status an
+  - `mistral auth delete` - Löscht gespeicherten API-Key
+
+- **System-Keyring-Integration**
+  - macOS Keychain
+  - GNOME Keyring (Linux)
+  - Windows Credential Manager
+  - Kein Klartext in Shell-Config-Dateien mehr nötig!
+
+- **AES-256 Verschlüsselung als Fallback**
+  - PBKDF2 mit 480.000 Iterationen (OWASP-Empfehlung)
+  - Master-Passwort-basierte Schlüsselableitung
+  - Verschlüsselte Datei: `~/.mistral-cli-key.enc`
+
+### 🔐 Hinzugefügt - SFTP Support (Sichere Dateiübertragung)
+
+- **Neues Tool: `upload_sftp`**
+  - Sichere Dateiübertragung via SSH File Transfer Protocol
+  - Vollständig verschlüsselte Übertragung (im Gegensatz zu FTP)
+  - Empfohlene Alternative für sensible Daten
+
+- **Authentifizierungs-Optionen**
+  - Passwort-Authentifizierung (SFTP_PASS Umgebungsvariable)
+  - SSH-Key-Authentifizierung (SFTP_KEY_PATH Umgebungsvariable)
+  - Unterstützte Key-Typen: RSA, Ed25519, ECDSA
+
+- **Umgebungsvariablen**
+  - `SFTP_USER` - SFTP Benutzername
+  - `SFTP_PASS` - SFTP Passwort
+  - `SFTP_KEY_PATH` - Pfad zum SSH Private Key
+
+- **Sicherheitsfeatures**
+  - Pfad-Validierung für lokale Dateien
+  - Keine Credentials im Log (wie bei FTP)
+  - Automatische Host-Key-Verifikation
+  - Timeout-Handling
+
+### Geändert
+
+- **Tool-Anzahl**
+  - Von 13 auf 14 Tools erhöht
+  - FTP-Upload jetzt explizit als "unverschlüsselt" markiert
+
+- **`mistral_tools.py`**
+  - Neue Funktion `_upload_sftp()` mit umfassender Fehlerbehandlung
+  - Tool-Dispatcher um SFTP erweitert
+
+- **`requirements.txt`**
+  - `paramiko>=3.4.0` als optionale Dependency hinzugefügt
+
+### Dokumentation
+
+- Tool-Beschreibungen aktualisiert
+- FTP vs SFTP Unterscheidung klargestellt
+
+---
+
 ## [1.2.0] - 2025-01-08
 
 ### 🔒 Sicherheit - Erweiterte Bash Command Validation

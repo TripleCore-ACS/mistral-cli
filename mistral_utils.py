@@ -3,7 +3,7 @@
 Mistral CLI - Utilities Module
 Zentrale Funktionen für Client-Initialisierung, Logging, Konfiguration und Sicherheit
 
-Version: 1.2.0
+Version: 1.3.0
 """
 
 import os
@@ -24,6 +24,27 @@ try:
 except ImportError:
     DOTENV_AVAILABLE = False
 
+# Versuche keyring zu laden (optional, für sichere Key-Speicherung)
+try:
+    import keyring
+    KEYRING_AVAILABLE = True
+except ImportError:
+    KEYRING_AVAILABLE = False
+
+# Versuche cryptography zu laden (optional, für AES-Fallback)
+try:
+    from cryptography.fernet import Fernet
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+    import base64
+    CRYPTO_AVAILABLE = True
+except ImportError:
+    CRYPTO_AVAILABLE = False
+
+import getpass
+import hashlib
+import secrets
+
 # Mistral Client Import
 from mistralai import Mistral
 
@@ -39,6 +60,12 @@ DEFAULT_TIMEOUT = 30
 
 # Log-Datei im Home-Verzeichnis
 LOG_FILE = Path.home() / ".mistral-cli.log"
+
+# Sichere Speicherung Konstanten
+KEYRING_SERVICE = "mistral-cli"
+KEYRING_USERNAME = "api_key"
+ENCRYPTED_KEY_FILE = Path.home() / ".mistral-cli-key.enc"
+SALT_FILE = Path.home() / ".mistral-cli-salt"
 
 
 # ============================================================================
@@ -299,6 +326,284 @@ load_environment()
 
 
 # ============================================================================
+# Sichere API-Key-Verwaltung (v1.3.0)
+# ============================================================================
+
+def _derive_key_from_password(password: str, salt: bytes) -> bytes:
+    """
+    Leitet einen AES-Schlüssel aus einem Passwort ab (PBKDF2).
+    
+    Args:
+        password: Das Master-Passwort
+        salt: Salt für die Ableitung
+    
+    Returns:
+        32-Byte-Schlüssel für Fernet
+    """
+    if not CRYPTO_AVAILABLE:
+        raise RuntimeError("cryptography nicht installiert")
+    
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=salt,
+        iterations=480000,  # OWASP-Empfehlung für 2023+
+    )
+    key = base64.urlsafe_b64encode(kdf.derive(password.encode()))
+    return key
+
+
+def _get_or_create_salt() -> bytes:
+    """
+    Liest oder erstellt einen Salt für die Schlüsselableitung.
+    
+    Returns:
+        16-Byte-Salt
+    """
+    if SALT_FILE.exists():
+        with open(SALT_FILE, 'rb') as f:
+            return f.read()
+    else:
+        salt = secrets.token_bytes(16)
+        with open(SALT_FILE, 'wb') as f:
+            f.write(salt)
+        # Dateirechte einschränken (nur Besitzer)
+        os.chmod(SALT_FILE, 0o600)
+        return salt
+
+
+def store_api_key(api_key: str, master_password: Optional[str] = None) -> Tuple[bool, str]:
+    """
+    Speichert den API-Key sicher.
+    
+    Methode 1 (Keyring): Nutzt OS-nativen Credential Manager
+    Methode 2 (AES): Verschlüsselt mit Master-Passwort
+    
+    Args:
+        api_key: Der zu speichernde API-Key
+        master_password: Optionales Master-Passwort für AES-Fallback
+    
+    Returns:
+        Tuple aus (Erfolg, Methode/Fehlermeldung)
+    """
+    if not api_key or not api_key.strip():
+        return (False, "API-Key darf nicht leer sein")
+    
+    api_key = api_key.strip()
+    
+    # Methode 1: Keyring (bevorzugt)
+    if KEYRING_AVAILABLE:
+        try:
+            keyring.set_password(KEYRING_SERVICE, KEYRING_USERNAME, api_key)
+            logger.info("API-Key sicher im System-Keyring gespeichert")
+            return (True, "keyring")
+        except Exception as e:
+            logger.warning(f"Keyring-Speicherung fehlgeschlagen: {e}")
+            # Fallback zu AES
+    
+    # Methode 2: AES-Verschlüsselung mit Master-Passwort
+    if CRYPTO_AVAILABLE:
+        if not master_password:
+            try:
+                master_password = getpass.getpass("🔐 Master-Passwort für API-Key-Verschlüsselung: ")
+                if not master_password:
+                    return (False, "Master-Passwort erforderlich")
+            except (EOFError, KeyboardInterrupt):
+                return (False, "Abgebrochen")
+        
+        try:
+            salt = _get_or_create_salt()
+            key = _derive_key_from_password(master_password, salt)
+            fernet = Fernet(key)
+            encrypted = fernet.encrypt(api_key.encode())
+            
+            with open(ENCRYPTED_KEY_FILE, 'wb') as f:
+                f.write(encrypted)
+            
+            # Dateirechte einschränken
+            os.chmod(ENCRYPTED_KEY_FILE, 0o600)
+            
+            logger.info("API-Key mit AES-256 verschlüsselt gespeichert")
+            return (True, "aes")
+        except Exception as e:
+            logger.error(f"AES-Verschlüsselung fehlgeschlagen: {e}")
+            return (False, f"Verschlüsselung fehlgeschlagen: {e}")
+    
+    return (False, "Weder keyring noch cryptography verfügbar. Installiere: pip install keyring")
+
+
+def get_stored_api_key(master_password: Optional[str] = None) -> Optional[str]:
+    """
+    Ruft den sicher gespeicherten API-Key ab.
+    
+    Args:
+        master_password: Master-Passwort für AES-Entschlüsselung (falls verwendet)
+    
+    Returns:
+        API-Key oder None wenn nicht gefunden/entschlüsselbar
+    """
+    # Methode 1: Keyring
+    if KEYRING_AVAILABLE:
+        try:
+            api_key = keyring.get_password(KEYRING_SERVICE, KEYRING_USERNAME)
+            if api_key:
+                logger.debug("API-Key aus System-Keyring geladen")
+                return api_key
+        except Exception as e:
+            logger.debug(f"Keyring-Abruf fehlgeschlagen: {e}")
+    
+    # Methode 2: AES-verschlüsselte Datei
+    if CRYPTO_AVAILABLE and ENCRYPTED_KEY_FILE.exists():
+        if not master_password:
+            try:
+                master_password = getpass.getpass("🔐 Master-Passwort: ")
+            except (EOFError, KeyboardInterrupt):
+                return None
+        
+        try:
+            salt = _get_or_create_salt()
+            key = _derive_key_from_password(master_password, salt)
+            fernet = Fernet(key)
+            
+            with open(ENCRYPTED_KEY_FILE, 'rb') as f:
+                encrypted = f.read()
+            
+            api_key = fernet.decrypt(encrypted).decode()
+            logger.debug("API-Key aus verschlüsselter Datei geladen")
+            return api_key
+        except Exception as e:
+            logger.warning(f"API-Key-Entschlüsselung fehlgeschlagen: {e}")
+            return None
+    
+    return None
+
+
+def delete_stored_api_key() -> Tuple[bool, str]:
+    """
+    Löscht den gespeicherten API-Key.
+    
+    Returns:
+        Tuple aus (Erfolg, Meldung)
+    """
+    deleted = []
+    
+    # Keyring löschen
+    if KEYRING_AVAILABLE:
+        try:
+            keyring.delete_password(KEYRING_SERVICE, KEYRING_USERNAME)
+            deleted.append("keyring")
+        except Exception:
+            pass  # Nicht vorhanden oder Fehler
+    
+    # Verschlüsselte Datei löschen
+    if ENCRYPTED_KEY_FILE.exists():
+        try:
+            ENCRYPTED_KEY_FILE.unlink()
+            deleted.append("encrypted file")
+        except Exception as e:
+            logger.error(f"Konnte verschlüsselte Datei nicht löschen: {e}")
+    
+    # Salt auch löschen
+    if SALT_FILE.exists():
+        try:
+            SALT_FILE.unlink()
+            deleted.append("salt")
+        except Exception:
+            pass
+    
+    if deleted:
+        logger.info(f"API-Key gelöscht aus: {', '.join(deleted)}")
+        return (True, f"Gelöscht aus: {', '.join(deleted)}")
+    
+    return (False, "Kein gespeicherter API-Key gefunden")
+
+
+def setup_api_key_interactive() -> bool:
+    """
+    Interaktive Einrichtung des API-Keys.
+    
+    Returns:
+        True wenn erfolgreich, False sonst
+    """
+    print()
+    print("╔" + "═" * 62 + "╗")
+    print("║  🔐 Mistral CLI - API-Key Einrichtung                          ║")
+    print("╠" + "═" * 62 + "╣")
+    
+    # Zeige verfügbare Speichermethoden
+    if KEYRING_AVAILABLE:
+        print("║  ✅ System-Keyring verfügbar (empfohlen)                      ║")
+    else:
+        print("║  ❌ System-Keyring nicht verfügbar                           ║")
+        print("║     → pip install keyring                                   ║")
+    
+    if CRYPTO_AVAILABLE:
+        print("║  ✅ AES-Verschlüsselung verfügbar (Fallback)                  ║")
+    else:
+        print("║  ❌ AES-Verschlüsselung nicht verfügbar                      ║")
+        print("║     → pip install cryptography                              ║")
+    
+    print("╠" + "═" * 62 + "╣")
+    print("║  API-Key erhalten: https://console.mistral.ai/               ║")
+    print("╚" + "═" * 62 + "╝")
+    print()
+    
+    if not KEYRING_AVAILABLE and not CRYPTO_AVAILABLE:
+        print("❌ Keine sichere Speichermethode verfügbar.")
+        print("   Installiere: pip install keyring")
+        return False
+    
+    try:
+        api_key = getpass.getpass("🔑 Mistral API-Key eingeben: ")
+        
+        if not api_key or not api_key.strip():
+            print("❌ API-Key darf nicht leer sein.")
+            return False
+        
+        # Einfache Validierung
+        if len(api_key) < 10:
+            print("⚠️  Warnung: API-Key scheint zu kurz zu sein.")
+        
+        success, method = store_api_key(api_key)
+        
+        if success:
+            print(f"\n✅ API-Key erfolgreich gespeichert! (Methode: {method})")
+            return True
+        else:
+            print(f"\n❌ Speichern fehlgeschlagen: {method}")
+            return False
+            
+    except (EOFError, KeyboardInterrupt):
+        print("\nAbgebrochen.")
+        return False
+
+
+def get_api_key_status() -> Dict[str, Any]:
+    """
+    Gibt den Status der API-Key-Speicherung zurück.
+    
+    Returns:
+        Dictionary mit Status-Informationen
+    """
+    status = {
+        "keyring_available": KEYRING_AVAILABLE,
+        "crypto_available": CRYPTO_AVAILABLE,
+        "keyring_has_key": False,
+        "encrypted_file_exists": ENCRYPTED_KEY_FILE.exists(),
+        "env_var_set": bool(os.environ.get("MISTRAL_API_KEY")),
+    }
+    
+    if KEYRING_AVAILABLE:
+        try:
+            key = keyring.get_password(KEYRING_SERVICE, KEYRING_USERNAME)
+            status["keyring_has_key"] = bool(key)
+        except Exception:
+            pass
+    
+    return status
+
+
+# ============================================================================
 # Client-Initialisierung
 # ============================================================================
 
@@ -310,8 +615,14 @@ def get_client(api_key: Optional[str] = None) -> Mistral:
     Initialisiert und gibt einen Mistral Client zurück.
     Verwendet Singleton-Pattern für Wiederverwendung.
     
+    Sucht den API-Key in folgender Reihenfolge:
+    1. Expliziter Parameter
+    2. Umgebungsvariable MISTRAL_API_KEY
+    3. Sicher gespeicherter Key (Keyring/AES)
+    4. Interaktive Einrichtung (falls nicht gefunden)
+    
     Args:
-        api_key: Optionaler API-Key (überschreibt Umgebungsvariable)
+        api_key: Optionaler API-Key (überschreibt alles andere)
     
     Returns:
         Mistral Client Instanz
@@ -325,25 +636,39 @@ def get_client(api_key: Optional[str] = None) -> Mistral:
     if _client_instance is not None and api_key is None:
         return _client_instance
     
-    # API-Key ermitteln
+    # API-Key ermitteln (Priorität: Parameter > Env > Gespeichert)
     key = api_key or os.environ.get("MISTRAL_API_KEY")
+    
+    # Fallback: Sicher gespeicherter Key
+    if not key:
+        key = get_stored_api_key()
+    
+    # Immer noch kein Key? Interaktive Einrichtung anbieten
+    if not key:
+        print()
+        print("🔑 Kein API-Key gefunden.")
+        print()
+        
+        try:
+            response = input("Möchtest du jetzt einen API-Key einrichten? [J/n]: ").strip().lower()
+            if response in ['', 'j', 'ja', 'y', 'yes']:
+                if setup_api_key_interactive():
+                    key = get_stored_api_key()
+        except (EOFError, KeyboardInterrupt):
+            print("\nAbgebrochen.")
     
     if not key:
         error_msg = """
 ╔══════════════════════════════════════════════════════════════════╗
 ║  FEHLER: MISTRAL_API_KEY nicht gefunden                          ║
 ╠══════════════════════════════════════════════════════════════════╣
-║  Bitte setzen Sie den API-Key auf eine der folgenden Weisen:     ║
+║  Bitte richte den API-Key auf eine der folgenden Weisen ein:      ║
 ║                                                                  ║
-║  Option 1: Umgebungsvariable (temporär)                          ║
+║  Option 1: Interaktive Einrichtung (empfohlen, sicher)           ║
+║    ./mistral auth setup                                          ║
+║                                                                  ║
+║  Option 2: Umgebungsvariable (temporär)                          ║
 ║    export MISTRAL_API_KEY='ihr-api-key'                          ║
-║                                                                  ║
-║  Option 2: Shell-Konfiguration (dauerhaft)                       ║
-║    echo "export MISTRAL_API_KEY='ihr-api-key'" >> ~/.bashrc      ║
-║    source ~/.bashrc                                              ║
-║                                                                  ║
-║  Option 3: .env-Datei (empfohlen für Entwicklung)                ║
-║    echo "MISTRAL_API_KEY=ihr-api-key" > ~/.mistral-cli.env       ║
 ║                                                                  ║
 ║  API-Key erhalten: https://console.mistral.ai/                   ║
 ╚══════════════════════════════════════════════════════════════════╝
@@ -1018,4 +1343,4 @@ def check_file_operation_safety(
 
 def get_version() -> str:
     """Returns the current version of mistral-cli."""
-    return "1.2.0"
+    return "1.3.0"
