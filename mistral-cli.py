@@ -16,19 +16,21 @@ import re
 from typing import List, Optional
 
 # Lokale Imports
-from mistral_utils import (
+from mistralcli import (
     get_client,
     logger,
-    is_dangerous_command,
     DEFAULT_MODEL,
     DEFAULT_TEMPERATURE,
     DEFAULT_MAX_TOKENS,
+    get_version,
+)
+from mistralcli.security import is_dangerous_command
+from mistralcli.auth import (
     setup_api_key_interactive,
     get_api_key_status,
     delete_stored_api_key,
-    get_version,
 )
-from mistral_tools import TOOLS, execute_tool
+from mistralcli.tools import TOOLS, execute_tool
 from mistral_chat import cmd_chat
 
 

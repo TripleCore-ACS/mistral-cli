@@ -34,17 +34,32 @@ Eine leistungsstarke Kommandozeilenanwendung für Mistral AI mit erweiterten Too
 - CSV-Dateien lesen und analysieren
 - Bildanalyse (Format, Größe, Dimensionen)
 
-### Neu in v1.3.0 🆕
+### Neu in v1.5.2 🆕
 
-- **Sichere API-Key-Verwaltung** - Kein Klartext mehr in Shell-Configs!
+- **🏗️ Modulare Architektur** - Professionelle Python-Paketstruktur
+  - Von 2 monolithischen Dateien → 25 fokussierte Module
+  - Klare Trennung: `core/`, `security/`, `auth/`, `utils/`, `tools/`
+  - Bessere Wartbarkeit, Testbarkeit und Erweiterbarkeit
+  - 100% Rückwärtskompatibel
+
+- **🧪 Umfassende Test-Suite** - 424 Unit-Tests mit pytest
+  - ✅ 100% Erfolgsquote (424/424 Tests bestehen)
+  - 📈 40% Code Coverage (Security-Module: 90%+)
+  - Automatisierte Security-Tests (236 Tests)
+  - Performance-Benchmarks (< 50µs)
+  - `./run_tests.sh` - Komfortabler Test-Runner
+
+- **🔐 Sichere API-Key-Verwaltung** - Kein Klartext mehr in Shell-Configs!
   - System-Keyring (macOS Keychain, GNOME Keyring, Windows Credential Manager)
   - AES-256 Verschlüsselung als Fallback
   - Interaktive Einrichtung: `./mistral auth setup`
-- **SFTP-Support** - Sichere Dateiübertragung via SSH
+
+- **🔒 SFTP-Support** - Sichere Dateiübertragung via SSH
   - Passwort-Authentifizierung
   - SSH-Key-Support (RSA, Ed25519, ECDSA)
   - Verschlüsselte Alternative zu FTP
-- **14 Tools** - Neues Tool `upload_sftp`
+
+- **🛠️ 14 Tools** - Neues Tool `upload_sftp`
 
 ### Neu in v1.2.0
 
@@ -250,20 +265,56 @@ You: exit                           # Chat beenden
 
 ```
 mistral-cli/
-├── mistral                 # Einstiegspunkt (Shell-Script)
-├── mistral-cli.py          # Hauptanwendung mit Subcommands
-├── mistral_chat.py         # Chat-Modus mit Tool-Support
-├── mistral_tools.py        # 13 Tool-Definitionen und Ausführung
-├── mistral_utils.py        # 🆕 Zentrale Utilities (Client, Logging, etc.)
-├── mistral_tui.py          # Text User Interface
-├── requirements.txt        # Python-Abhängigkeiten
-├── setup.py                # Package-Installation
-├── CHANGELOG.md            # 🆕 Versionshistorie
-├── README.md               # Diese Datei
-├── QUICKSTART.md           # Schnellstart-Anleitung
-├── EXAMPLES.md             # Ausführliche Beispiele
-├── CONTRIBUTING.md         # Beitragsrichtlinien
-└── LICENSE                 # MIT-Lizenz
+├── mistral                     # Einstiegspunkt (Shell-Script)
+├── mistral-cli.py              # Hauptanwendung mit Subcommands
+├── mistral_chat.py             # Chat-Modus mit Tool-Support
+├── mistral_tui.py              # Text User Interface
+│
+├── mistralcli/                 # 🆕 Modulares Python-Package (25 Module)
+│   ├── core/                   # Kern-Funktionalität
+│   │   ├── config.py           # Konstanten, Enums, Patterns
+│   │   ├── logging_config.py   # Logger Setup
+│   │   └── client.py           # Mistral Client Management
+│   ├── security/               # Sicherheits-Validierung
+│   │   ├── command_validator.py # Bash Command Security
+│   │   ├── path_validator.py   # Path Traversal Schutz
+│   │   ├── url_validator.py    # SSRF Protection
+│   │   └── sanitizers.py       # Sanitization
+│   ├── auth/                   # Authentifizierung
+│   │   └── api_key_manager.py  # Keyring & AES-256
+│   ├── utils/                  # Utilities
+│   │   ├── token_manager.py    # Token Handling
+│   │   ├── formatting.py       # Output Formatting
+│   │   └── helpers.py          # Misc Helpers
+│   └── tools/                  # 14 Tools
+│       ├── definitions.py      # Tool Schemas
+│       ├── executor.py         # Tool Dispatcher
+│       ├── system.py           # Bash Commands
+│       ├── filesystem.py       # File Operations
+│       ├── network.py          # Web & Downloads
+│       ├── transfer.py         # FTP/SFTP
+│       ├── data.py             # JSON/CSV
+│       └── image.py            # Image Analysis
+│
+├── tests/                      # 🧪 Test-Suite (424 Tests)
+│   ├── conftest.py             # Pytest Fixtures
+│   ├── security/               # Security-Tests (236 Tests)
+│   └── tools/                  # Tools-Tests
+│
+├── requirements.txt            # Python-Abhängigkeiten
+├── requirements-test.txt       # Test-Dependencies
+├── setup.py                    # Package-Installation
+├── pytest.ini                  # Pytest-Konfiguration
+├── run_tests.sh                # Test-Runner
+│
+├── README.md                   # Hauptdokumentation
+├── TESTING.md                  # Test-Dokumentation
+├── QUICKSTART.md               # Schnellstart-Anleitung
+├── EXAMPLES.md                 # Ausführliche Beispiele
+├── MIGRATION_COMPLETE.md       # Migration v1.5.2
+├── CHANGELOG.md                # Versionshistorie
+├── CONTRIBUTING.md             # Beitragsrichtlinien
+└── LICENSE                     # MIT-Lizenz
 ```
 
 ## Logging 🆕
@@ -383,9 +434,59 @@ pip install gnureadline
 pip install pyreadline3
 ```
 ```bash
-# Entwicklung
-pip install pytest black flake8 mypy
+# Entwicklung & Testing 🆕
+pip install -r requirements-test.txt
 ```
+
+## Development & Testing 🧪
+
+### Test-Suite ausführen
+
+Das Projekt verfügt über eine umfassende Test-Suite mit **424 Tests** und **100% Erfolgsquote**:
+
+```bash
+# Alle Tests ausführen
+./run_tests.sh
+
+# Nur Security-Tests (236 Tests)
+./run_tests.sh security
+pytest -m security
+
+# Nur Unit-Tests (424 Tests)
+./run_tests.sh unit
+pytest -m unit
+
+# Mit Coverage-Report
+./run_tests.sh coverage
+
+# Schnelle Tests ohne Coverage
+./run_tests.sh quick
+```
+
+### Test-Ergebnisse
+
+```
+✅ 424/424 Tests bestehen (100%)
+📈 40% Code Coverage
+🔒 Security-Module: 90%+ Coverage
+⏱️  ~3 Sekunden Laufzeit
+```
+
+### Coverage-Report ansehen
+
+```bash
+# HTML-Report öffnen
+firefox htmlcov/index.html
+
+# Terminal-Report
+pytest --cov=mistralcli --cov-report=term
+```
+
+### Weitere Informationen
+
+- **Test-Dokumentation**: `TESTING.md`
+- **Test-Structure**: `tests/README.md`
+- **Migration-Details**: `MIGRATION_COMPLETE.md`
 
 ## Beitragen
 

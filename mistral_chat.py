@@ -158,15 +158,15 @@ def setup_readline() -> tuple:
 # Lokale Imports
 # ============================================================================
 
-from mistral_utils import (
+from mistralcli import (
     get_client,
     logger,
-    trim_messages,
     DEFAULT_MODEL,
     DEFAULT_TEMPERATURE,
     DEFAULT_MAX_TOKENS,
 )
-from mistral_tools import TOOLS, execute_tool
+from mistralcli.utils import trim_messages
+from mistralcli.tools import TOOLS, execute_tool
 
 
 # ============================================================================

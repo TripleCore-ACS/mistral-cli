@@ -15,7 +15,10 @@ from textual.widgets import (
 )
 from textual.binding import Binding
 from textual import on
-from mistralai import Mistral
+
+# Lokale Imports
+from mistralcli import get_client
+from mistralcli.tools import TOOLS, execute_tool
 
 
 # ASCII Logo für Mistral CLI
@@ -51,10 +54,6 @@ COMPACT_LOGO = r"""
 │        CLI TOOL - ⚠️ UNOFFICIAL VERSION ⚠️             │
 └──────────────────────────────────────────────────────┘
 """
-
-
-# Import der Tool-Funktionen aus mistral_tools
-from mistral_tools import TOOLS, execute_tool
 
 
 class MistralTUI(App):
@@ -242,7 +241,7 @@ class MistralTUI(App):
             self.exit(message="ERROR: MISTRAL_API_KEY not set!\n" +
                      "Please set: export MISTRAL_API_KEY='your-api-key'")
 
-        self.client = Mistral(api_key=api_key)
+        self.client = get_client(api_key=api_key)
 
         # Willkommensnachricht im Chat
         chat_log = self.query_one("#chat_log", RichLog)

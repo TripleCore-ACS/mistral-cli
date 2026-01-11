@@ -18,7 +18,7 @@ def read_requirements():
 
 setup(
     name="mistral-cli",
-    version="1.3.0",
+    version="1.5.2",
     author="Daniel Thun",
     author_email="",  # Optional: Ihre E-Mail hier einfügen
     description="Leistungsstarke CLI für Mistral AI mit erweiterten Tool-Funktionen",
