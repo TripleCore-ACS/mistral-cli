@@ -1,4 +1,4 @@
-# Mistral CLI
+# 🇫🇷Mistral CLI🇫🇷
 
 Eine leistungsstarke Kommandozeilenanwendung für Mistral AI mit erweiterten Tool-Funktionen.
 
@@ -8,14 +8,14 @@ Eine leistungsstarke Kommandozeilenanwendung für Mistral AI mit erweiterten Too
 
 ## Features
 
-### 🚀 Hauptfunktionen
+### Hauptfunktionen
 - **Interaktiver Chat** mit Function Calling
 - **Bash-Befehlsgenerierung und -ausführung**
 - **Textvervollständigung**
 - **Modellübersicht**
 - **TUI-Modus** (Text User Interface)
 
-### 🛠️ 14 Integrierte Tools
+### 14 Integrierte Tools
 
 #### Dateisystem
 - Dateien lesen, schreiben, umbenennen
@@ -27,39 +27,41 @@ Eine leistungsstarke Kommandozeilenanwendung für Mistral AI mit erweiterten Too
 - URL-Inhalte abrufen
 - Dateien herunterladen
 - FTP-Upload (unverschlüsselt)
-- **SFTP-Upload (verschlüsselt)** 🆕
+- **SFTP-Upload (verschlüsselt)**
 
 #### Datenverarbeitung
 - JSON parsen und durchsuchen
 - CSV-Dateien lesen und analysieren
 - Bildanalyse (Format, Größe, Dimensionen)
 
-### Neu in v1.5.2 🆕
+### Neu in v1.5.2
 
-- **🏗️ Modulare Architektur** - Professionelle Python-Paketstruktur
+- ** Modulare Architektur** - Professionelle Python-Paketstruktur
   - Von 2 monolithischen Dateien → 25 fokussierte Module
   - Klare Trennung: `core/`, `security/`, `auth/`, `utils/`, `tools/`
   - Bessere Wartbarkeit, Testbarkeit und Erweiterbarkeit
   - 100% Rückwärtskompatibel
 
-- **🧪 Umfassende Test-Suite** - 424 Unit-Tests mit pytest
-  - ✅ 100% Erfolgsquote (424/424 Tests bestehen)
-  - 📈 40% Code Coverage (Security-Module: 90%+)
+- ** Umfassende Test-Suite** - 424 Unit-Tests mit pytest
+  - 100% Erfolgsquote (424/424 Tests bestehen)
+  - 40% Code Coverage (Security-Module: 90%+)
   - Automatisierte Security-Tests (236 Tests)
   - Performance-Benchmarks (< 50µs)
   - `./run_tests.sh` - Komfortabler Test-Runner
 
-- **🔐 Sichere API-Key-Verwaltung** - Kein Klartext mehr in Shell-Configs!
+### Neu in v1.3.0
+
+- ** Sichere API-Key-Verwaltung** - Kein Klartext mehr in Shell-Configs!
   - System-Keyring (macOS Keychain, GNOME Keyring, Windows Credential Manager)
   - AES-256 Verschlüsselung als Fallback
   - Interaktive Einrichtung: `./mistral auth setup`
 
-- **🔒 SFTP-Support** - Sichere Dateiübertragung via SSH
+- ** SFTP-Support** - Sichere Dateiübertragung via SSH
   - Passwort-Authentifizierung
   - SSH-Key-Support (RSA, Ed25519, ECDSA)
   - Verschlüsselte Alternative zu FTP
 
-- **🛠️ 14 Tools** - Neues Tool `upload_sftp`
+- ** 14 Tools** - Neues Tool `upload_sftp`
 
 ### Neu in v1.2.0
 
@@ -68,7 +70,7 @@ Eine leistungsstarke Kommandozeilenanwendung für Mistral AI mit erweiterten Too
 - **URL-Validierung** - SSRF-Schutz
 - **Download-Limits** - Max. 100MB
 
-### Neu in v1.1.0
+### Neu in v1.1.5
 
 - **Bugfix: Pfeiltasten im Chat-Modus**
 - **Neue Chat-Befehle** - `history` - Zeigt die letzten 10 Eingaben an
@@ -108,7 +110,7 @@ pip install -r requirements.txt
 
 ### Schritt 4: API-Key konfigurieren
 
-**Option A: Sichere Einrichtung (empfohlen)** 🆕
+**Option A: Sichere Einrichtung (empfohlen)**
 ```bash
 ./mistral auth setup
 ```
@@ -165,7 +167,7 @@ You: exit                           # Chat beenden
 ./mistral chat -m mistral-large-latest
 ```
 
-**Mit Debug-Ausgaben:** 🆕
+**Mit Debug-Ausgaben:** 
 ```bash
 ./mistral --debug chat
 ```
@@ -195,7 +197,7 @@ You: exit                           # Chat beenden
 ./mistral tui
 ```
 
-### API-Key-Verwaltung 🆕
+### API-Key-Verwaltung 
 ```bash
 # API-Key sicher einrichten (interaktiv)
 ./mistral auth setup
@@ -238,9 +240,9 @@ You: exit                           # Chat beenden
 | `MISTRAL_API_KEY` | Mistral AI API-Key (erforderlich) |
 | `FTP_USER` | FTP-Benutzername (optional) |
 | `FTP_PASS` | FTP-Passwort (optional) |
-| `SFTP_USER` | SFTP-Benutzername (optional) 🆕 |
-| `SFTP_PASS` | SFTP-Passwort (optional) 🆕 |
-| `SFTP_KEY_PATH` | Pfad zum SSH Private Key (optional) 🆕 |
+| `SFTP_USER` | SFTP-Benutzername (optional) |
+| `SFTP_PASS` | SFTP-Passwort (optional) |
+| `SFTP_KEY_PATH` | Pfad zum SSH Private Key (optional) |
 
 ## Tool-Übersicht
 
@@ -256,7 +258,7 @@ You: exit                           # Chat beenden
 | `download_file` | Lädt Dateien herunter |
 | `search_web` | Sucht im Internet (DuckDuckGo) |
 | `upload_ftp` | Lädt Dateien via FTP hoch (unverschlüsselt) |
-| `upload_sftp` | Lädt Dateien via SFTP hoch (verschlüsselt) 🆕 |
+| `upload_sftp` | Lädt Dateien via SFTP hoch (verschlüsselt) |
 | `parse_json` | Parst JSON-Daten |
 | `parse_csv` | Liest CSV-Dateien |
 | `get_image_info` | Analysiert Bilder |
@@ -270,7 +272,7 @@ mistral-cli/
 ├── mistral_chat.py             # Chat-Modus mit Tool-Support
 ├── mistral_tui.py              # Text User Interface
 │
-├── mistralcli/                 # 🆕 Modulares Python-Package (25 Module)
+├── mistralcli/                 # Modulares Python-Package (25 Module)
 │   ├── core/                   # Kern-Funktionalität
 │   │   ├── config.py           # Konstanten, Enums, Patterns
 │   │   ├── logging_config.py   # Logger Setup
@@ -296,7 +298,7 @@ mistral-cli/
 │       ├── data.py             # JSON/CSV
 │       └── image.py            # Image Analysis
 │
-├── tests/                      # 🧪 Test-Suite (424 Tests)
+├── tests/                      # Test-Suite (424 Tests)
 │   ├── conftest.py             # Pytest Fixtures
 │   ├── security/               # Security-Tests (236 Tests)
 │   └── tools/                  # Tools-Tests
@@ -317,7 +319,7 @@ mistral-cli/
 └── LICENSE                     # MIT-Lizenz
 ```
 
-## Logging 🆕
+## Logging
 
 Alle Aktionen werden automatisch protokolliert:
 
@@ -365,7 +367,7 @@ Nach der Installation zeigt der Chat:
 
 ## Sicherheit
 
-- **Sichere API-Key-Speicherung**: System-Keyring oder AES-256 Verschlüsselung 🆕
+- **Sichere API-Key-Speicherung**: System-Keyring oder AES-256 Verschlüsselung 
 - **Bestätigungspflicht**: Alle destruktiven Operationen erfordern Bestätigung (außer mit `-y` Flag)
 - **Gefährliche Befehle**: Automatische Blockierung von `rm -rf /`, Fork-Bombs, etc.
 - **SFTP statt FTP**: Verschlüsselte Dateiübertragung für sensible Daten
@@ -373,7 +375,7 @@ Nach der Installation zeigt der Chat:
 - **Error-Handling**: Robuste Fehlerbehandlung für alle Operationen
 - **Logging**: Alle Aktionen werden protokolliert (ohne sensible Daten)
 
-### Blockierte Befehle 🆕
+### Blockierte Befehle 
 
 Folgende Befehlsmuster werden automatisch blockiert:
 - `rm -rf /` und Varianten
@@ -410,7 +412,7 @@ cat ~/.mistral-cli.log
 ## Optionale Abhängigkeiten
 
 ```bash
-# Sichere API-Key-Speicherung (empfohlen) 🆕
+# Sichere API-Key-Speicherung (empfohlen) 
 pip install keyring
 ```
 ```bash
@@ -434,11 +436,11 @@ pip install gnureadline
 pip install pyreadline3
 ```
 ```bash
-# Entwicklung & Testing 🆕
+# Entwicklung & Testing 
 pip install -r requirements-test.txt
 ```
 
-## Development & Testing 🧪
+## Development & Testing 
 
 ### Test-Suite ausführen
 
