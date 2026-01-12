@@ -117,7 +117,7 @@ def store_api_key(api_key: str, master_password: Optional[str] = None) -> Tuple[
     if CRYPTO_AVAILABLE:
         if not master_password:
             try:
-                master_password = getpass.getpass("🔐 Master password for API key encryption: ")
+                master_password = getpass.getpass("Master password for API key encryption: ")
                 if not master_password:
                     return (False, "Master password required")
             except (EOFError, KeyboardInterrupt):
@@ -168,7 +168,7 @@ def get_stored_api_key(master_password: Optional[str] = None) -> Optional[str]:
     if CRYPTO_AVAILABLE and ENCRYPTED_KEY_FILE.exists():
         if not master_password:
             try:
-                master_password = getpass.getpass("🔐 Master password: ")
+                master_password = getpass.getpass("Master password: ")
             except (EOFError, KeyboardInterrupt):
                 return None
 
@@ -242,26 +242,26 @@ def setup_api_key_interactive() -> bool:
         True if successful, False otherwise
     """
     print()
-    print("╔" + "═" * 62 + "╗")
-    print("║  🔐 Mistral CLI - API Key Setup                               ║")
-    print("╠" + "═" * 62 + "╣")
+    print("╔" + "═" * 63 + "╗")
+    print("║  Mistral CLI - API Key Setup                                  ║")
+    print("╠" + "═" * 63 + "╣")
 
     # Show available storage methods
     if KEYRING_AVAILABLE:
         print("║  ✅ System keyring available (recommended)                    ║")
     else:
-        print("║  ❌ System keyring not available                             ║")
-        print("║     → pip install keyring                                   ║")
+        print("║  ❌ System keyring not available                              ║")
+        print("║     → pip install keyring                                     ║")
 
     if CRYPTO_AVAILABLE:
         print("║  ✅ AES encryption available (fallback)                       ║")
     else:
-        print("║  ❌ AES encryption not available                             ║")
-        print("║     → pip install cryptography                              ║")
+        print("║  ❌ AES encryption not available                              ║")
+        print("║     → pip install cryptography                                ║")
 
-    print("╠" + "═" * 62 + "╣")
-    print("║  Get API key: https://console.mistral.ai/                    ║")
-    print("╚" + "═" * 62 + "╝")
+    print("╠" + "═" * 63 + "╣")
+    print("║  Get API key: https://console.mistral.ai/                     ║")
+    print("╚" + "═" * 63 + "╝")
     print()
 
     if not KEYRING_AVAILABLE and not CRYPTO_AVAILABLE:
@@ -270,7 +270,7 @@ def setup_api_key_interactive() -> bool:
         return False
 
     try:
-        api_key = getpass.getpass("🔑 Enter Mistral API key: ")
+        api_key = getpass.getpass("Enter Mistral API key: ")
 
         if not api_key or not api_key.strip():
             print("❌ API key must not be empty.")
