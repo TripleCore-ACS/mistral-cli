@@ -50,9 +50,17 @@ htmlcov/
 .env.local
 
 # API Keys (WICHTIG!)
-*api_key*
+# Block API key files but allow the api_key_manager.py module
+*.api_key
+*_api_key.txt
+api_key.txt
 *API_KEY*
 credentials.json
+.mistral-cli-key.enc
+.mistral-cli-salt
+
+# Explicitly allow the API key manager module
+!mistralcli/auth/api_key_manager.py
 
 # User-specific files
 INITIALISIERUNG.txt
